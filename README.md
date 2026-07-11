@@ -56,13 +56,23 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Railway 배포
 
-`Dockerfile`과 `railway.toml`을 포함했습니다.
+1. [Railway](https://railway.app) → **New Project** → **Deploy from GitHub**
+2. `JimProKing/longshort-han-nune` 선택
+3. **Root Directory는 비워 두기** (레포 루트가 곧 앱 루트)
+4. 배포 후 생성된 URL로 접속
 
-1. 이 저장소를 Railway에 연결
-2. 루트 디렉터리가 이 폴더인지 확인
-3. 배포
+`PORT`는 Railway가 넣습니다. 별도 환경 변수는 없어도 됩니다.
 
-`PORT`는 플랫폼이 주입합니다.
+### 배포가 실패할 때
+
+| 증상 | 확인 |
+|------|------|
+| Dockerfile not found | Root Directory를 잘못 잡았을 때. 비우기 |
+| Build failed (pip) | `requirements.txt` 재배포 (이미 고정 버전으로 맞춰 둠) |
+| Healthcheck failed | Deploy 로그에 uvicorn 기동 여부 확인. `/api/health` 응답 필요 |
+| 서비스는 떴는데 502 | Generate Domain 했는지, Public Networking 켜졌는지 |
+
+Settings → Deploy 로그 맨 아래 에러 한 줄이 원인인 경우가 많습니다.
 
 ---
 
