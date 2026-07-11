@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>롱숏 한눈에 · 이영찬</title>
+  <meta name="description" content="BTC·ETH·XRP 무기한 롱/숏 비율, 지지·저항, 진입·손절·익절을 한 화면에서. 이영찬 제작." />
+  <meta name="author" content="이영찬 (Young Chan Lee)" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-text">
+          <div class="brand-top">
+            <h1>롱숏 한눈에</h1>
+            <span class="brand-by">by 이영찬</span>
+          </div>
+          <p class="brand-desc">비율 · 지지선 · 진입 / 손절 / 익절</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="meta-pill" id="updatedAt">—</span>
+        <button class="btn btn-primary" id="refreshBtn" type="button">
+          <span id="refreshIcon">↻</span> 새로고침
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="intro">
+      <p class="intro-lead">
+        롱·숏 비율이랑 지지선, 진입가가 사이트마다 흩어져 있어서
+        <strong>한 화면</strong>에 모아 두었습니다.
+      </p>
+      <div class="intro-tags">
+        <span class="intro-tag">BTC</span>
+        <span class="intro-tag">ETH</span>
+        <span class="intro-tag">XRP</span>
+        <span class="intro-tag muted">Binance · Hyperliquid · Kraken</span>
+      </div>
+    </section>
+
+    <div id="errorBox" class="error-box hidden"></div>
+
+    <div id="loading" class="state-box">
+      <div class="spinner"></div>
+      <p>실시간 데이터 불러오는 중…</p>
+    </div>
+
+    <div id="app" class="hidden">
+      <div class="overview" id="overview"></div>
+
+      <div class="tabs" id="tabs"></div>
+
+      <div id="detail"></div>
+
+      <div class="disclaimer" id="disclaimer"></div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="footer-maker">
+      <div class="footer-maker-main">
+        <strong>이영찬</strong>
+        <span class="footer-role">Young Chan Lee · 1인 개발</span>
+      </div>
+      <p class="footer-maker-note">
+        쓸 때마다 탭 여러 개 띄우기 귀찮아서 직접 만들었습니다.
+        투자 자문이 아닌 개인 참고용 도구입니다.
+      </p>
+    </div>
+
+    <div class="footer-contact">
+      <a
+        class="contact-item"
+        href="https://www.linkedin.com/in/young-chan-lee-9304a3287/"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="LinkedIn 프로필 (로그인 상태면 바로 열림)"
+      >
+        <span class="label">LinkedIn</span>
+        <span class="value">Young Chan Lee</span>
+      </a>
+      <span class="contact-item" title="카카오톡 ID">
+        <span class="label">Kakao</span>
+        <span class="value">caramel112</span>
+      </span>
+      <a class="contact-item" href="mailto:caramel2516@naver.com">
+        <span class="label">Email</span>
+        <span class="value">caramel2516@naver.com</span>
+      </a>
+    </div>
+    <p class="footer-note">
+      데이터: Binance · Hyperliquid · Kraken ·
+      LinkedIn은 상대가 로그인돼 있으면 프로필이 열리고, 비로그인이면 LinkedIn이 로그인 창을 띄울 수 있습니다.
+    </p>
+
+
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
