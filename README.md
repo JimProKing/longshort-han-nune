@@ -1,70 +1,40 @@
-# 롱숏 한눈에 👀📈
+# 롱숏 한눈에
 
-> 탭 17개 띄우다 멘탈 나가서 만든  
-> **BTC · ETH · XRP** 무기한 선물 한 장 대시보드
+BTC, ETH, XRP 무기한 선물 기준으로  
+롱·숏 비율, 지지·저항, 진입/손절/익절 시나리오를 한 화면에서 보는 웹앱입니다.
 
-바이낸스 롱숏 비율 보고,  
-하이퍼리퀴드 OI 보고,  
-크라켄 펀딩 보고…  
-**“아 그냥 한 화면에 다 있으면 안 되나?”**
-
-→ 그래서 만들었습니다.
+Binance, Hyperliquid, Kraken 공개 API를 사용합니다.  
+API 키는 필요 없습니다.
 
 ---
 
-## 이게 뭐예요?
+## 왜 만들었는지
 
-| 보고 싶은 것 | 있어요? |
-|---|---|
-| 전체 계정 **롱 / 숏 %** + 추정 액수 | ✅ Binance |
-| **지지 · 저항** (스윙, 피봇, 피보, EMA) | ✅ |
-| **진입 / SL / TP** 시나리오 (롱·숏 둘 다) | ✅ |
-| **Hyperliquid** OI · 펀딩 · 24h 대금 | ✅ |
-| **Kraken** OI · 펀딩 · 24h 대금 | ✅ |
-| 투자 수익 보장 | ❌ 그건 신이 함 |
+롱숏 비율 보는 사이트, 차트, 하이퍼리퀴드, 메모장이 늘 따로 있었습니다.  
+매일 탭을 여러 개 띄우는 게 번거로워서, 제가 실제로 볼 내용만 모았습니다.
 
-> ⚠️ **투자 자문 아닙니다.**  
-> 공개 데이터 + 휴리스틱으로 만든 **개인 참고용**이에요.  
-> 레버리지 잘못 쓰면 잔고가 귀여운 숫자가 됩니다.
+투자 자문이 아닙니다.  
+공개 데이터와 간단한 기술적 휴리스틱으로 만든 **개인 참고용** 도구입니다.  
+레버리지·청산·슬리피지는 본인이 판단해야 합니다.
 
 ---
 
-## 왜 만들었냐면
+## 기능
 
-차트 사이트 하나,  
-롱숏 사이트 하나,  
-하이퍼리퀴드 하나,  
-메모장에 진입가 적고…
+**Binance**
+- 전체 계정 롱/숏 비율
+- OI 기준 추정 롱·숏 규모(달러)
+- 탑트레이더 계정·포지션 비율, 테이커 매수/매도 대금
+- 지지·저항(스윙, 피봇, 피보나치, EMA)
+- 롱/숏 시나리오별 진입가, SL, TP1/TP2, R:R, 신뢰도
 
-매일 그 루틴이 귀찮아서  
-**“그냥 내가 쓸 거 하나 만들자”** 했습니다.
-
-이영찬 (Young Chan Lee) · 1인 개발  
-쓸 때마다 탭 여러 개 띄우기 싫어서 직접 짬 🍜
-
----
-
-## 화면에서 보이는 것들
-
-### 1. 롱 · 숏 비율 + 액수 (Binance)
-- 계정 기준 롱% / 숏%
-- OI × 비율로 추정한 **달러 규모**
-- 탑트레이더 포지션, 테이커 매수·매도 대금
-
-### 2. 거래소 3대장 비교
-| 거래소 | OI | 펀딩 | 24h 대금 | 계정 L/S |
-|---|---|---|---|---|
-| **Binance** | ✅ | ✅ | ✅ | ✅ |
-| **Hyperliquid** | ✅ | ✅ | ✅ | 공개 API 없음 |
-| **Kraken** | ✅ | ✅ | ✅ | 공개 API 없음 |
-
-### 3. 지지 · 저항 + 롱/숏 시나리오
-- 주요 레벨
-- 진입가 · 손절 · 익절1 · 익절2 · R:R · 신뢰도
+**Hyperliquid / Kraken**
+- 미결제약정(OI), 펀딩비, 24시간 거래대금, 마크가  
+- 계정 단위 롱/숏 비율은 해당 거래소 공개 API에 없어서 제공하지 않습니다.
 
 ---
 
-## 로컬에서 켜기
+## 로컬 실행
 
 ```bash
 cd crypto-ls-analyzer
@@ -80,85 +50,65 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-브라우저에서 → [http://localhost:8000](http://localhost:8000)
-
-끝. API 키 없어도 됩니다. (공개 REST만 씀)
+브라우저: http://localhost:8000
 
 ---
 
-## Railway에 올리기
+## Railway 배포
 
-이미 `Dockerfile` + `railway.toml` 넣어 뒀어요.
+`Dockerfile`과 `railway.toml`을 포함했습니다.
 
-1. 이 레포 연결
-2. Root Directory = `crypto-ls-analyzer` (모노레포면)
-3. Deploy
-4. 커피 한 잔 ☕
+1. 이 저장소를 Railway에 연결
+2. 루트 디렉터리가 이 폴더인지 확인
+3. 배포
 
-`PORT` 는 Railway가 알아서 줍니다.
+`PORT`는 플랫폼이 주입합니다.
 
 ---
 
-## API (심심하면)
+## API
 
 | 경로 | 설명 |
-|---|---|
-| `GET /api/health` | 살아 있니? |
-| `GET /api/analyze` | BTC·ETH·XRP 한 방에 |
-| `GET /api/analyze?refresh=true` | 캐시 무시하고 새로 |
-| `GET /api/analyze/BTC` | 코인 하나만 |
+|------|------|
+| `GET /api/health` | 헬스체크 |
+| `GET /api/analyze` | BTC / ETH / XRP 전체 |
+| `GET /api/analyze?refresh=true` | 캐시 무시 갱신 |
+| `GET /api/analyze/{BTC\|ETH\|XRP}` | 단일 자산 |
 
-캐시 TTL ≈ **45초** (거래소 rate limit 예의)
+서버 캐시 TTL은 약 45초입니다.
 
 ---
 
-## 폴더 구조
+## 구조
 
 ```
-crypto-ls-analyzer/
-├── app/
-│   ├── main.py              # FastAPI 입구
-│   └── services/
-│       ├── binance.py       # 바이낸스
-│       ├── exchanges.py     # HL + Kraken + 묶음
-│       ├── analysis.py      # 비율 · 레벨
-│       └── strategy.py      # 진입 / SL / TP
-├── static/                  # 프론트 (바닐라 JS)
-├── Dockerfile
-└── requirements.txt
+app/
+  main.py
+  services/
+    binance.py      # Binance
+    exchanges.py    # Hyperliquid, Kraken, 데이터 묶음
+    analysis.py     # 비율·레벨 분석
+    strategy.py     # 진입 / SL / TP
+static/             # 프론트엔드 (HTML / CSS / JS)
 ```
 
-거창한 프론트 프레임워크 없음.  
-HTML + CSS + JS. 가볍고 빠른 맛.
+백엔드: FastAPI, httpx, uvicorn  
+프론트: 별도 프레임워크 없음
 
 ---
 
-## 기술 스택
+## 만든 사람
 
-- **Backend:** FastAPI · httpx · uvicorn  
-- **Frontend:** 바닐라 JS (의존성 0개 프론트)  
-- **데이터:** Binance · Hyperliquid · Kraken Futures 공개 API  
+이영찬 (Young Chan Lee)
 
----
-
-## 연락
-
-| | |
-|---|---|
-| 👤 | 이영찬 · Young Chan Lee |
-| 💬 | Kakao `caramel112` |
-| ✉️ | [caramel2516@naver.com](mailto:caramel2516@naver.com) |
-| 💼 | [LinkedIn](https://www.linkedin.com/in/young-chan-lee-9304a3287/) (로그인돼 있으면 잘 열려요) |
+- Kakao: caramel112  
+- Email: caramel2516@naver.com  
+- LinkedIn: [young-chan-lee-9304a3287](https://www.linkedin.com/in/young-chan-lee-9304a3287/)  
+  (비로그인 시 LinkedIn이 로그인 화면을 띄울 수 있습니다)
 
 ---
 
-## 면책 (진지 모드 한 줄)
+## 면책
 
-본 프로젝트는 금융 투자 권유가 아니며,  
-사용으로 인한 손실에 대해 책임지지 않습니다.  
-항상 본인 리스크 관리하세요. 🙏
-
----
-
-Made with ☕ and mild market anxiety  
-by **이영찬**
+본 프로젝트는 금융 투자 권유나 자문이 아닙니다.  
+이용으로 인한 손실에 대해 제작자는 책임지지 않습니다.
