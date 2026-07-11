@@ -1,9 +1,10 @@
-# Nixpacks: Python requirements.txt 자동 인식 (Docker 없이도 배포 잘 됨)
 [build]
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+# Railway는 startCommand를 셸 없이 실행하는 경우가 있어
+# $PORT 가 문자 그대로 넘어감 → sh -c 로 변수 치환
+startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
