@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import httpx
+
+from app.services.http_util import get_json
 
 FAPI = "https://fapi.binance.com"
 FUTURES_DATA = "https://fapi.binance.com/futures/data"
@@ -17,13 +18,11 @@ SYMBOLS = {
 }
 
 # Reasonable timeouts for Railway / shared hosting
-TIMEOUT = httpx.Timeout(15.0, connect=8.0)
+TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 
 
 async def _get(client: httpx.AsyncClient, url: str, params: dict | None = None) -> Any:
-    r = await client.get(url, params=params or {})
-    r.raise_for_status()
-    return r.json()
+    return await get_json(client, url, params, retries=3, label=url)
 
 
 async def fetch_ticker(client: httpx.AsyncClient, symbol: str) -> dict:

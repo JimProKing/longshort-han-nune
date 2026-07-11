@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from app.services.http_util import get_json
+
 BYBIT = "https://api.bybit.com"
 
 SYMBOLS = {
@@ -23,9 +25,7 @@ INTERVAL_MAP = {
 
 
 async def _get(client: httpx.AsyncClient, path: str, params: dict) -> Any:
-    r = await client.get(f"{BYBIT}{path}", params=params)
-    r.raise_for_status()
-    data = r.json()
+    data = await get_json(client, f"{BYBIT}{path}", params, retries=2, label=path)
     if data.get("retCode") not in (0, "0", None):
         raise RuntimeError(f"Bybit {path}: {data.get('retMsg', data)}")
     return data.get("result") or {}

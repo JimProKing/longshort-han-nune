@@ -34,16 +34,15 @@ KRAKEN_SYMBOLS = {
 }
 
 
+from app.services.http_util import get_json, post_json
+
+
 async def _get(client: httpx.AsyncClient, url: str, params: dict | None = None) -> Any:
-    r = await client.get(url, params=params or {})
-    r.raise_for_status()
-    return r.json()
+    return await get_json(client, url, params, retries=2, label=url)
 
 
 async def _post(client: httpx.AsyncClient, url: str, body: dict) -> Any:
-    r = await client.post(url, json=body)
-    r.raise_for_status()
-    return r.json()
+    return await post_json(client, url, body, retries=2)
 
 
 async def fetch_binance_oi_value(client: httpx.AsyncClient, symbol: str) -> dict:
@@ -153,27 +152,20 @@ def _estimate_ls_notional(
 async def fetch_binance_exchange_slice(
     client: httpx.AsyncClient, asset: str, symbol: str
 ) -> dict:
-    (
-        ticker,
-        global_ls,
-        top_account,
-        top_position,
-        taker,
-        oi_live,
-        oi_val,
-        funding,
-        k4,
-        k1d,
-        k1h,
-    ) = await asyncio.gather(
+    # 요청을 3묶음으로 나눠 429 완화 (한 심볼에 11개 동시 호출 금지)
+    ticker, global_ls, funding, oi_live = await asyncio.gather(
         fetch_ticker(client, symbol),
         fetch_global_ls_ratio(client, symbol, "1h", 24),
+        fetch_funding_rate(client, symbol),
+        fetch_open_interest(client, symbol),
+    )
+    top_account, top_position, taker, oi_val = await asyncio.gather(
         fetch_top_trader_ls_ratio(client, symbol, "1h", 24),
         fetch_top_trader_position_ratio(client, symbol, "1h", 24),
         fetch_taker_ls_ratio(client, symbol, "1h", 24),
-        fetch_open_interest(client, symbol),
         fetch_binance_oi_value(client, symbol),
-        fetch_funding_rate(client, symbol),
+    )
+    k4, k1d, k1h = await asyncio.gather(
         fetch_klines(client, symbol, "4h", 200),
         fetch_klines(client, symbol, "1d", 120),
         fetch_klines(client, symbol, "1h", 100),
@@ -249,13 +241,31 @@ async def fetch_binance_exchange_slice(
     }
 
 
-async def fetch_symbol_bundle(asset: str) -> dict:
+def _side_for_asset(side_all: dict | Exception | None, asset: str) -> dict:
+    if isinstance(side_all, Exception):
+        return {"ok": False, "error": str(side_all)}
+    if not isinstance(side_all, dict):
+        return {"ok": False, "error": "no data"}
+    row = side_all.get(asset)
+    if not row:
+        return {"ok": False, "error": "not listed"}
+    return row
+
+
+async def fetch_symbol_bundle(
+    asset: str,
+    *,
+    client: httpx.AsyncClient | None = None,
+    hl_all: dict | None = None,
+    kr_all: dict | None = None,
+    prefer_bybit: bool = False,
+) -> dict:
     """
     Full multi-exchange bundle for one asset (BTC/ETH/XRP).
 
-    Primary: Binance (L/S, klines, funding…)
-    Fallback: Bybit — Railway/US IP 등에서 Binance 차단될 때
-    Side: Hyperliquid, Kraken (OI / funding / volume)
+    Primary: Binance (L/S, klines…) → 실패/429 시 Bybit
+    prefer_bybit=True 이면 Bybit을 먼저 (클라우드 IP 안정용)
+    Side: Hyperliquid, Kraken (OI / funding / volume) — 외부에서 1회 주입 가능
     """
     asset = asset.upper()
     if asset not in BINANCE_SYMBOLS:
@@ -267,54 +277,69 @@ async def fetch_symbol_bundle(asset: str) -> dict:
         "Accept": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=TIMEOUT, headers=headers, follow_redirects=True) as client:
-        # Side exchanges always in parallel
-        hl_task = asyncio.create_task(fetch_hyperliquid_all(client))
-        kr_task = asyncio.create_task(fetch_kraken_all(client))
+    owns_client = client is None
+    if owns_client:
+        client = httpx.AsyncClient(timeout=TIMEOUT, headers=headers, follow_redirects=True)
+
+    assert client is not None
+    try:
+        if hl_all is None or kr_all is None:
+            hl_task = asyncio.create_task(fetch_hyperliquid_all(client))
+            kr_task = asyncio.create_task(fetch_kraken_all(client))
+        else:
+            hl_task = kr_task = None
 
         primary = None
         primary_err = None
         source = "binance"
 
-        try:
-            primary = await fetch_binance_exchange_slice(client, asset, symbol)
-            source = "binance"
-        except Exception as e:
-            primary_err = f"Binance: {type(e).__name__}: {e}"
-            try:
-                primary = await bybit_svc.fetch_primary_slice(client, asset, symbol)
-                source = "bybit"
-            except Exception as e2:
-                # Wait for side data then fail with full context
-                hl_all, kr_all = await asyncio.gather(hl_task, kr_task, return_exceptions=True)
-                raise RuntimeError(
-                    f"{asset} 주요 데이터 실패 | {primary_err} | Bybit: {type(e2).__name__}: {e2}"
-                ) from e2
+        async def _try_binance():
+            return await fetch_binance_exchange_slice(client, asset, symbol)
 
-        hl_all, kr_all = await asyncio.gather(hl_task, kr_task, return_exceptions=True)
+        async def _try_bybit():
+            return await bybit_svc.fetch_primary_slice(client, asset, symbol)
+
+        order = (_try_bybit, _try_binance) if prefer_bybit else (_try_binance, _try_bybit)
+        names = ("bybit", "binance") if prefer_bybit else ("binance", "bybit")
+
+        for fn, name in zip(order, names):
+            try:
+                primary = await fn()
+                source = name
+                break
+            except Exception as e:
+                msg = f"{name.title()}: {type(e).__name__}: {e}"
+                primary_err = f"{primary_err} | {msg}" if primary_err else msg
+                continue
+
+        if primary is None:
+            if hl_task and kr_task:
+                await asyncio.gather(hl_task, kr_task, return_exceptions=True)
+            raise RuntimeError(f"{asset} 주요 데이터 실패 | {primary_err}")
+
+        if hl_task and kr_task:
+            loaded_hl, loaded_kr = await asyncio.gather(hl_task, kr_task, return_exceptions=True)
+            if hl_all is None:
+                hl_all = loaded_hl if isinstance(loaded_hl, dict) else loaded_hl
+            if kr_all is None:
+                kr_all = loaded_kr if isinstance(loaded_kr, dict) else loaded_kr
+    finally:
+        if owns_client:
+            await client.aclose()
 
     raw = primary.pop("_raw")
+    hl = _side_for_asset(hl_all, asset)
+    kr = _side_for_asset(kr_all, asset)
 
-    hl = hl_all.get(asset) if isinstance(hl_all, dict) else {"ok": False, "error": str(hl_all)}
-    kr = kr_all.get(asset) if isinstance(kr_all, dict) else {"ok": False, "error": str(kr_all)}
-    if isinstance(hl_all, Exception):
-        hl = {"ok": False, "error": str(hl_all)}
-    if isinstance(kr_all, Exception):
-        kr = {"ok": False, "error": str(kr_all)}
-
-    # Exchange cards: show actual primary + others
-    bn_card: dict
-    bybit_card: dict | None = None
     if source == "binance":
         bn_card = {**primary, "ok": True}
-        # light bybit optional — skip extra call
         bybit_card = {"ok": False, "error": "primary는 Binance (Bybit 미조회)"}
     else:
-        bn_card = {
-            "ok": False,
-            "error": primary_err or "Binance 차단/실패 — Bybit 폴백 사용 중",
-            "exchange": "binance",
-        }
+        short_err = primary_err or "Binance 실패 — Bybit 폴백"
+        # 429 메시지는 짧게
+        if "429" in short_err:
+            short_err = "Binance rate limit (429) — Bybit 사용 중"
+        bn_card = {"ok": False, "error": short_err, "exchange": "binance"}
         bybit_card = {**primary, "ok": True, "exchange": "bybit"}
 
     exchanges = {
@@ -324,23 +349,13 @@ async def fetch_symbol_bundle(asset: str) -> dict:
         "kraken": kr,
     }
 
-    oi_parts = []
-    for ex in (primary, hl, kr):
-        if isinstance(ex, dict) and ex.get("ok") is not False and ex.get("oi_usd"):
-            oi_parts.append(float(ex["oi_usd"]))
-        elif isinstance(ex, dict) and ex.get("oi_usd") and source == "binance" and ex is primary:
-            oi_parts.append(float(ex["oi_usd"]))
-    # primary always has oi when ok
+    oi_parts: list[float] = []
     if primary.get("oi_usd"):
-        # rebuild carefully to avoid double-count
-        oi_parts = []
-        if primary.get("oi_usd"):
-            oi_parts.append(float(primary["oi_usd"]))
-        if isinstance(hl, dict) and hl.get("ok") and hl.get("oi_usd"):
-            oi_parts.append(float(hl["oi_usd"]))
-        if isinstance(kr, dict) and kr.get("ok") and kr.get("oi_usd"):
-            oi_parts.append(float(kr["oi_usd"]))
-
+        oi_parts.append(float(primary["oi_usd"]))
+    if isinstance(hl, dict) and hl.get("ok") and hl.get("oi_usd"):
+        oi_parts.append(float(hl["oi_usd"]))
+    if isinstance(kr, dict) and kr.get("ok") and kr.get("oi_usd"):
+        oi_parts.append(float(kr["oi_usd"]))
     total_oi_usd = sum(oi_parts) if oi_parts else None
 
     return {

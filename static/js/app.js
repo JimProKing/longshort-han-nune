@@ -556,9 +556,14 @@ async function loadData(force = false) {
       : `갱신 · ${fmtTime(data.generated_at)}`;
 
     if (data.errors?.length) {
-      $("errorBox").textContent =
-        "일부 자산 조회 실패: " + data.errors.map((e) => `${e.asset}: ${e.error}`).join(" · ");
-      $("errorBox").classList.remove("hidden");
+      // 429 등은 폴백 성공 시 조용히, 진짜 빠진 코인만 안내
+      const soft = data.errors.filter((e) => !String(e.error).includes("429") || !data.coins?.length);
+      if (soft.length && data.coins?.length < 3) {
+        $("errorBox").textContent =
+          "일부 자산 조회 실패: " +
+          soft.map((e) => `${e.asset}: ${String(e.error).slice(0, 120)}`).join(" · ");
+        $("errorBox").classList.remove("hidden");
+      }
     }
 
     $("loading").classList.add("hidden");
