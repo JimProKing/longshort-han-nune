@@ -959,6 +959,13 @@ a:hover {
   color: var(--text-muted);
 }
 
+.idle-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
 .spinner {
   width: 40px;
   height: 40px;

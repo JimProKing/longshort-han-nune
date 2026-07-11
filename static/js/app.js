@@ -517,7 +517,8 @@ function render() {
   renderDetail();
 }
 
-async function loadData(force = false) {
+async function loadData() {
+  // 새로고침 버튼으로만 호출 — 자동/진입 시 요청 없음
   if (state.loading) return;
   state.loading = true;
 
@@ -525,15 +526,14 @@ async function loadData(force = false) {
   btn.disabled = true;
   $("refreshIcon").textContent = "…";
 
-  if (!state.coins.length) {
-    $("loading").classList.remove("hidden");
-    $("app").classList.add("hidden");
-  }
+  $("idle")?.classList.add("hidden");
+  $("loading").classList.remove("hidden");
+  $("app").classList.add("hidden");
   $("errorBox").classList.add("hidden");
 
   try {
-    const url = force ? "/api/analyze?refresh=true" : "/api/analyze";
-    const res = await fetch(url);
+    // 버튼 누를 때만 강제 갱신
+    const res = await fetch("/api/analyze?refresh=true");
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       const d = err.detail;
@@ -551,12 +551,9 @@ async function loadData(force = false) {
       state.selected = state.coins[0].asset;
     }
 
-    $("updatedAt").textContent = data.cached
-      ? `캐시 · ${fmtTime(data.generated_at)} (${data.cache_age_sec}s)`
-      : `갱신 · ${fmtTime(data.generated_at)}`;
+    $("updatedAt").textContent = `갱신 · ${fmtTime(data.generated_at)}`;
 
     if (data.errors?.length) {
-      // 429 등은 폴백 성공 시 조용히, 진짜 빠진 코인만 안내
       const soft = data.errors.filter((e) => !String(e.error).includes("429") || !data.coins?.length);
       if (soft.length && data.coins?.length < 3) {
         $("errorBox").textContent =
@@ -567,14 +564,19 @@ async function loadData(force = false) {
     }
 
     $("loading").classList.add("hidden");
+    $("idle")?.classList.add("hidden");
     $("app").classList.remove("hidden");
     render();
   } catch (e) {
     $("loading").classList.add("hidden");
     $("errorBox").textContent = `데이터 로드 실패: ${e.message}`;
     $("errorBox").classList.remove("hidden");
-    if (!state.coins.length) {
+    if (state.coins.length) {
+      $("app").classList.remove("hidden");
+      render();
+    } else {
       $("app").classList.add("hidden");
+      $("idle")?.classList.remove("hidden");
     }
   } finally {
     state.loading = false;
@@ -583,8 +585,5 @@ async function loadData(force = false) {
   }
 }
 
-$("refreshBtn").addEventListener("click", () => loadData(true));
-
-loadData(false);
-// Auto refresh every 60s
-setInterval(() => loadData(false), 60000);
+$("refreshBtn").addEventListener("click", () => loadData());
+// 페이지 진입·자동 주기 요청 없음. 새로고침 버튼만.
