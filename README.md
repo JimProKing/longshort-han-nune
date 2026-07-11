@@ -3,7 +3,9 @@
 BTC, ETH, XRP 무기한 선물 기준으로  
 롱·숏 비율, 지지·저항, 진입/손절/익절 시나리오를 한 화면에서 보는 웹앱입니다.
 
-Binance, Hyperliquid, Kraken 공개 API를 사용합니다.  
+**데모:** https://web-production-e7d0f.up.railway.app/
+
+Binance / Bybit, Hyperliquid, Kraken 공개 API를 사용합니다.  
 API 키는 필요 없습니다.
 
 ---
@@ -54,12 +56,16 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ---
 
-## Railway 배포
+## 배포
+
+현재 배포 주소: https://web-production-e7d0f.up.railway.app/
+
+직접 올리려면:
 
 1. [Railway](https://railway.app) → **New Project** → **Deploy from GitHub**
 2. `JimProKing/longshort-han-nune` 선택
 3. **Root Directory는 비워 두기** (레포 루트가 곧 앱 루트)
-4. 배포 후 생성된 URL로 접속
+4. 배포 후 도메인 연결
 
 `PORT`는 Railway가 넣습니다. 별도 환경 변수는 없어도 됩니다.
 
