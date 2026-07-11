@@ -517,8 +517,8 @@ function render() {
   renderDetail();
 }
 
-async function loadData() {
-  // 새로고침 버튼으로만 호출 — 자동/진입 시 요청 없음
+async function loadData({ force = false } = {}) {
+  // 첫 진입 1회 + 새로고침 버튼만. 주기적 자동 갱신 없음.
   if (state.loading) return;
   state.loading = true;
 
@@ -527,13 +527,15 @@ async function loadData() {
   $("refreshIcon").textContent = "…";
 
   $("idle")?.classList.add("hidden");
-  $("loading").classList.remove("hidden");
-  $("app").classList.add("hidden");
+  if (!state.coins.length) {
+    $("loading").classList.remove("hidden");
+    $("app").classList.add("hidden");
+  }
   $("errorBox").classList.add("hidden");
 
   try {
-    // 버튼 누를 때만 강제 갱신
-    const res = await fetch("/api/analyze?refresh=true");
+    const url = force ? "/api/analyze?refresh=true" : "/api/analyze";
+    const res = await fetch(url);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       const d = err.detail;
@@ -551,7 +553,9 @@ async function loadData() {
       state.selected = state.coins[0].asset;
     }
 
-    $("updatedAt").textContent = `갱신 · ${fmtTime(data.generated_at)}`;
+    $("updatedAt").textContent = data.cached
+      ? `캐시 · ${fmtTime(data.generated_at)} (${data.cache_age_sec ?? 0}s)`
+      : `갱신 · ${fmtTime(data.generated_at)}`;
 
     if (data.errors?.length) {
       const soft = data.errors.filter((e) => !String(e.error).includes("429") || !data.coins?.length);
@@ -585,5 +589,6 @@ async function loadData() {
   }
 }
 
-$("refreshBtn").addEventListener("click", () => loadData());
-// 페이지 진입·자동 주기 요청 없음. 새로고침 버튼만.
+$("refreshBtn").addEventListener("click", () => loadData({ force: true }));
+// 첫 방문 시 1회 로드. 이후 요청은 새로고침 버튼만 (자동 주기 갱신 없음)
+loadData({ force: false });
