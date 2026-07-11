@@ -56,32 +56,6 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ---
 
-## 배포
-
-현재 배포 주소: https://web-production-e7d0f.up.railway.app/
-
-직접 올리려면:
-
-1. [Railway](https://railway.app) → **New Project** → **Deploy from GitHub**
-2. `JimProKing/longshort-han-nune` 선택
-3. **Root Directory는 비워 두기** (레포 루트가 곧 앱 루트)
-4. 배포 후 도메인 연결
-
-`PORT`는 Railway가 넣습니다. 별도 환경 변수는 없어도 됩니다.
-
-### 배포가 실패할 때
-
-| 증상 | 확인 |
-|------|------|
-| Dockerfile not found | Root Directory를 잘못 잡았을 때. 비우기 |
-| Build failed (pip) | `requirements.txt` 재배포 (이미 고정 버전으로 맞춰 둠) |
-| Healthcheck failed | Deploy 로그에 uvicorn 기동 여부 확인. `/api/health` 응답 필요 |
-| 서비스는 떴는데 502 | Generate Domain 했는지, Public Networking 켜졌는지 |
-
-Settings → Deploy 로그 맨 아래 에러 한 줄이 원인인 경우가 많습니다.
-
----
-
 ## API
 
 | 경로 | 설명 |
