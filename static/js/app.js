@@ -195,35 +195,50 @@ function exchangeCard(def, ex) {
     </div>`;
 }
 
-function exchangeRows(exchanges, totalOi) {
+function exchangeRows(exchanges, totalOi, primarySource) {
   const defs = [
     { key: "binance", name: "Binance", accent: "#f0b90b" },
+    { key: "bybit", name: "Bybit", accent: "#f7a600" },
     { key: "hyperliquid", name: "Hyperliquid", accent: "#0d9488" },
     { key: "kraken", name: "Kraken", accent: "#5741d9" },
   ];
 
-  const panels = defs.map((d) => exchangeCard(d, exchanges?.[d.key])).join("");
+  // Bybit 카드: primary가 아니면서 "미조회"면 숨김
+  const showDefs = defs.filter((d) => {
+    if (d.key !== "bybit") return true;
+    const ex = exchanges?.bybit;
+    if (primarySource === "bybit") return true;
+    if (ex && ex.ok) return true;
+    // primary binance 일 때 bybit 미조회 메시지는 숨김
+    return ex && ex.ok !== false && !String(ex.error || "").includes("미조회");
+  });
+
+  const panels = showDefs.map((d) => exchangeCard(d, exchanges?.[d.key])).join("");
 
   const hl = exchanges?.hyperliquid;
   const hlOk = hl && hl.ok;
+  const srcNote =
+    primarySource === "bybit"
+      ? "현재 서버 지역에서 Binance가 막혀 Bybit 롱/숏·차트를 사용 중입니다."
+      : "롱/숏·차트 기본 소스: Binance (실패 시 Bybit 자동 전환).";
 
   return `
     <div class="exchange-card">
       <div class="ex-total card" style="margin-bottom:0.85rem">
-        3거래소 OI 합계 <strong>${fmtUsd(totalOi)}</strong>
-        <span class="muted"> · Binance + Hyperliquid + Kraken</span>
+        OI 합계(주요+HL+Kraken) <strong>${fmtUsd(totalOi)}</strong>
+        <span class="muted"> · primary: ${(primarySource || "—").toUpperCase()}</span>
         ${
           hlOk
             ? `<div class="ex-hl-highlight">Hyperliquid OI <strong>${fmtUsd(hl.oi_usd)}</strong> · 펀딩 <strong style="color:${Number(hl.funding_rate) >= 0 ? "var(--green)" : "var(--red)"}">${fmtFunding(hl.funding_rate)}</strong> · 24h <strong>${fmtUsd(hl.volume_24h_usd)}</strong></div>`
             : ""
         }
       </div>
-      <div class="ex-grid">
+      <div class="ex-grid ex-grid-4">
         ${panels}
       </div>
       <p class="ex-note">
-        Hyperliquid·Kraken은 공개 API로 OI·펀딩·24h 대금·마크가를 가져옵니다.
-        계정 단위 롱/숏 % 는 Binance만 제공합니다.
+        ${srcNote}
+        Hyperliquid·Kraken은 OI·펀딩·24h 대금. 계정 롱/숏 % 는 Binance 또는 Bybit.
       </p>
     </div>`;
 }
@@ -396,7 +411,7 @@ function renderDetail() {
       </div>
 
       <div class="card">
-        <div class="card-title">Binance 전체 계정 롱 · 숏 비율 · 액수</div>
+        <div class="card-title">${(a.primary_source || s.ls_source || "binance").toUpperCase()} 계정 롱 · 숏 비율 · 액수</div>
         <div class="ls-wrap">
           <div class="ls-labels">
             <span class="long">롱 ${s.global_long_pct.toFixed(2)}% · ${fmtUsd(s.long_notional_usd)}</span>
@@ -425,15 +440,15 @@ function renderDetail() {
         <div class="ratio-metrics">
           <div class="metric">
             <label>글로벌 L/S 비율</label>
-            <div class="val">${s.global_ls_ratio.toFixed(4)}</div>
+            <div class="val">${Number(s.global_ls_ratio ?? 0).toFixed(4)}</div>
           </div>
           <div class="metric">
             <label>탑트레이더 계정 L/S</label>
-            <div class="val">${s.top_account_ls_ratio.toFixed(4)}</div>
+            <div class="val">${s.top_account_ls_ratio != null ? Number(s.top_account_ls_ratio).toFixed(4) : "—"}</div>
           </div>
           <div class="metric">
             <label>탑 포지션 롱 · 규모</label>
-            <div class="val">${s.top_position_long_pct.toFixed(1)}% · ${fmtUsd(s.pos_long_notional_usd)}</div>
+            <div class="val">${Number(s.top_position_long_pct ?? 0).toFixed(1)}% · ${fmtUsd(s.pos_long_notional_usd)}</div>
           </div>
           <div class="metric">
             <label>테이커 매수 / 매도 (1h)</label>
@@ -449,7 +464,7 @@ function renderDetail() {
     </div>
 
     <h2 class="section-title">거래소별 포지션 · 유동성</h2>
-    ${exchangeRows(exchanges, a.total_oi_usd)}
+    ${exchangeRows(exchanges, a.total_oi_usd, a.primary_source || coin.primary_source)}
 
     <h2 class="section-title">지지 · 저항 레벨</h2>
     <div class="levels-grid">
@@ -521,7 +536,14 @@ async function loadData(force = false) {
     const res = await fetch(url);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail?.message || err.detail || `HTTP ${res.status}`);
+      const d = err.detail;
+      const msg =
+        typeof d === "string"
+          ? d
+          : d?.message
+            ? `${d.message}${d.errors ? " · " + JSON.stringify(d.errors) : ""}`
+            : `HTTP ${res.status}`;
+      throw new Error(msg);
     }
     const data = await res.json();
     state.coins = data.coins || [];

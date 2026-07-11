@@ -38,12 +38,14 @@ async def _analyze_one(asset: str) -> dict:
         return {
             "asset": asset,
             "symbol": symbol,
+            "primary_source": bundle.get("primary_source"),
             "analysis": analysis,
             "strategies": strategies,
             "updated_at": int(time.time() * 1000),
         }
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"{asset} 데이터 조회 실패: {e}") from e
+        # gather(return_exceptions=True) 에서도 메시지가 보이도록 RuntimeError 사용
+        raise RuntimeError(f"{asset} 데이터 조회 실패: {e}") from e
 
 
 @app.get("/api/health")
@@ -79,13 +81,20 @@ async def analyze_all(
             coins.append(res)
 
     if not coins:
-        raise HTTPException(status_code=502, detail={"message": "전체 조회 실패", "errors": errors})
+        # 프론트가 detail 문자열/객체를 모두 읽도록 평문 메시지 포함
+        err_txt = " · ".join(f"{e['asset']}: {e['error']}" for e in errors) or "unknown"
+        raise HTTPException(
+            status_code=502,
+            detail=f"전체 조회 실패 — {err_txt}",
+        )
 
+    sources = sorted({c.get("primary_source") for c in coins if c.get("primary_source")})
     payload = {
         "coins": coins,
         "errors": errors,
         "cached": False,
-        "source": "Binance · Hyperliquid · Kraken Futures",
+        "source": " · ".join(s.title() for s in sources) + " · Hyperliquid · Kraken",
+        "primary_sources": sources,
         "generated_at": int(now * 1000),
     }
     _cache[cache_key] = (now, payload)

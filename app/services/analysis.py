@@ -360,20 +360,28 @@ def analyze_symbol(bundle: dict) -> dict:
 
     exchanges = bundle.get("exchanges") or {}
     bn = _sanitize_exchange(exchanges.get("binance"))
+    bb = _sanitize_exchange(exchanges.get("bybit"))
     hl = _sanitize_exchange(exchanges.get("hyperliquid"))
     kr = _sanitize_exchange(exchanges.get("kraken"))
 
-    # Enrich sentiment with notional amounts (Binance)
+    # Enrich sentiment with notional amounts (primary exchange)
+    primary = None
     if bn and bn.get("ok"):
-        sentiment["oi_usd"] = bn.get("oi_usd")
-        sentiment["long_notional_usd"] = bn.get("long_notional_usd")
-        sentiment["short_notional_usd"] = bn.get("short_notional_usd")
-        sentiment["pos_long_notional_usd"] = bn.get("pos_long_notional_usd")
-        sentiment["pos_short_notional_usd"] = bn.get("pos_short_notional_usd")
-        sentiment["taker_buy_usd"] = bn.get("taker_buy_usd")
-        sentiment["taker_sell_usd"] = bn.get("taker_sell_usd")
-        sentiment["volume_24h_usd"] = bn.get("volume_24h_usd")
-        sentiment["notional_note"] = bn.get("notional_note")
+        primary = bn
+    elif bb and bb.get("ok"):
+        primary = bb
+
+    if primary:
+        sentiment["oi_usd"] = primary.get("oi_usd")
+        sentiment["long_notional_usd"] = primary.get("long_notional_usd")
+        sentiment["short_notional_usd"] = primary.get("short_notional_usd")
+        sentiment["pos_long_notional_usd"] = primary.get("pos_long_notional_usd")
+        sentiment["pos_short_notional_usd"] = primary.get("pos_short_notional_usd")
+        sentiment["taker_buy_usd"] = primary.get("taker_buy_usd")
+        sentiment["taker_sell_usd"] = primary.get("taker_sell_usd")
+        sentiment["volume_24h_usd"] = primary.get("volume_24h_usd")
+        sentiment["notional_note"] = primary.get("notional_note")
+        sentiment["ls_source"] = primary.get("exchange")
 
     return {
         "symbol": bundle["symbol"],
@@ -384,12 +392,14 @@ def analyze_symbol(bundle: dict) -> dict:
         "volume_24h": bundle["ticker"]["volume"],
         "quote_volume_24h": bundle["ticker"]["quote_volume"],
         "open_interest": bundle["open_interest"]["open_interest"],
-        "open_interest_usd": (bn or {}).get("oi_usd"),
+        "open_interest_usd": (primary or {}).get("oi_usd"),
         "mark_price": bundle["funding"]["mark_price"],
+        "primary_source": bundle.get("primary_source"),
         "sentiment": sentiment,
         "levels": levels,
         "exchanges": {
             "binance": bn,
+            "bybit": bb,
             "hyperliquid": hl,
             "kraken": kr,
         },
