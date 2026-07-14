@@ -29,8 +29,9 @@ app = FastAPI(
 )
 
 # In-memory cache (Railway single instance)
+# Keep short so frontend auto-poll sees fresh L/S (5m buckets + OI/price).
 _cache: dict[str, tuple[float, dict]] = {}
-CACHE_TTL_SEC = 90
+CACHE_TTL_SEC = 45
 
 # After Binance 429, prefer Bybit for a while
 _prefer_bybit_until = 0.0

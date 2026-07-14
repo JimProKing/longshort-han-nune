@@ -23,6 +23,22 @@ INTERVAL_MAP = {
     "1d": "D",
 }
 
+# account-ratio period: 5min, 15min, 30min, 1h, 4h, 1d
+RATIO_PERIOD_MAP = {
+    "5m": "5min",
+    "15m": "15min",
+    "30m": "30min",
+    "1h": "1h",
+    "4h": "4h",
+    "1d": "1d",
+    "5min": "5min",
+    "15min": "15min",
+    "30min": "30min",
+}
+
+LS_PERIOD = "5m"
+LS_HISTORY_LIMIT = 72
+
 
 async def _get(client: httpx.AsyncClient, path: str, params: dict) -> Any:
     data = await get_json(client, f"{BYBIT}{path}", params, retries=2, label=path)
@@ -97,16 +113,20 @@ async def fetch_klines(
 
 
 async def fetch_account_ratio(
-    client: httpx.AsyncClient, symbol: str, period: str = "1h", limit: int = 24
+    client: httpx.AsyncClient,
+    symbol: str,
+    period: str = LS_PERIOD,
+    limit: int = LS_HISTORY_LIMIT,
 ) -> list[dict]:
+    bybit_period = RATIO_PERIOD_MAP.get(period, period)
     result = await _get(
         client,
         "/v5/market/account-ratio",
         {
             "category": "linear",
             "symbol": symbol,
-            "period": period,
-            "limit": limit,
+            "period": bybit_period,
+            "limit": min(limit, 500),
         },
     )
     rows = list(reversed(result.get("list") or []))
@@ -156,7 +176,7 @@ async def fetch_primary_slice(client: httpx.AsyncClient, asset: str, symbol: str
         fetch_klines(client, symbol, "4h", 200),
         fetch_klines(client, symbol, "1d", 120),
         fetch_klines(client, symbol, "1h", 100),
-        fetch_account_ratio(client, symbol, "1h", 24),
+        fetch_account_ratio(client, symbol),
         fetch_open_interest(client, symbol),
     )
 

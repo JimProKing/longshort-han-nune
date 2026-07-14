@@ -181,6 +181,8 @@ def sentiment_from_ratios(
     crowded_long = global_long_pct >= 58 and funding_rate > 0.00005
     crowded_short = global_short_pct >= 58 and funding_rate < -0.00005
 
+    ls_updated_at = int(g["timestamp"]) if g and g.get("timestamp") else None
+
     return {
         "global_long_pct": round(global_long_pct, 2),
         "global_short_pct": round(global_short_pct, 2),
@@ -198,6 +200,9 @@ def sentiment_from_ratios(
         "crowded_long": crowded_long,
         "crowded_short": crowded_short,
         "ratio_trend": round(ratio_trend, 4),
+        # Exchange public L/S is bucketed; 5m is finest available on free REST
+        "ls_period": "5m",
+        "ls_updated_at": ls_updated_at,
         "history": {
             "global_ls": [
                 {

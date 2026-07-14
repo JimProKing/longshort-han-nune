@@ -1,4 +1,4 @@
-/* global document, fetch, setInterval */
+/* global document, fetch, setInterval, clearInterval */
 
 const ASSET_META = {
   BTC: { name: "Bitcoin", color: "#f7931a", cls: "btc" },
@@ -6,10 +6,14 @@ const ASSET_META = {
   XRP: { name: "XRP", color: "#00aae4", cls: "xrp" },
 };
 
+/** Near-realtime poll. L/S itself is 5m-bucketed by exchanges; we re-fetch often so OI/price and new 5m bars show up. */
+const AUTO_REFRESH_MS = 60_000;
+
 let state = {
   coins: [],
   selected: "BTC",
   loading: false,
+  autoTimer: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -451,7 +455,7 @@ function renderDetail() {
             <div class="val">${Number(s.top_position_long_pct ?? 0).toFixed(1)}% · ${fmtUsd(s.pos_long_notional_usd)}</div>
           </div>
           <div class="metric">
-            <label>테이커 매수 / 매도 (1h)</label>
+            <label>테이커 매수 / 매도 (5m)</label>
             <div class="val">${fmtUsd(s.taker_buy_usd)} / ${fmtUsd(s.taker_sell_usd)}</div>
           </div>
         </div>
@@ -459,7 +463,13 @@ function renderDetail() {
         <div class="bias-badge ${s.bias}">● ${s.label} · 점수 ${s.composite_score}</div>
         ${s.crowded_long ? `<span class="flag danger">⚠ 롱 과밀 (청산/되돌림 주의)</span>` : ""}
         ${s.crowded_short ? `<span class="flag warn">⚠ 숏 과밀 (숏스퀴즈 주의)</span>` : ""}
-        <p class="ls-hint">액수 = OI × 계정(또는 탑 포지션) 비율 추정. 선물 OI는 계약상 롱=숏 매칭.</p>
+        <p class="ls-hint">
+          롱/숏 비율: 거래소 공개 API <strong>5분 봉</strong>
+          ${s.ls_updated_at ? ` · 데이터 시각 ${fmtTime(s.ls_updated_at)}` : ""}
+          · 화면은 약 1분마다 자동 갱신.
+          틱 단위 실시간 % 는 무료 API에 없음.
+          액수 = OI × 계정(또는 탑 포지션) 비율 추정 (계약상 롱=숏 OI 매칭).
+        </p>
       </div>
     </div>
 
@@ -517,23 +527,25 @@ function render() {
   renderDetail();
 }
 
-async function loadData({ force = false } = {}) {
-  // 첫 진입 1회 + 새로고침 버튼만. 주기적 자동 갱신 없음.
+async function loadData({ force = false, silent = false } = {}) {
   if (state.loading) return;
   state.loading = true;
 
   const btn = $("refreshBtn");
-  btn.disabled = true;
-  $("refreshIcon").textContent = "…";
+  if (!silent) {
+    btn.disabled = true;
+    $("refreshIcon").textContent = "…";
+  }
 
   $("idle")?.classList.add("hidden");
   if (!state.coins.length) {
     $("loading").classList.remove("hidden");
     $("app").classList.add("hidden");
   }
-  $("errorBox").classList.add("hidden");
+  if (!silent) $("errorBox").classList.add("hidden");
 
   try {
+    // 수동 새로고침만 캐시 우회. 자동 폴링은 서버 45s 캐시 존중 (429 완화)
     const url = force ? "/api/analyze?refresh=true" : "/api/analyze";
     const res = await fetch(url);
     if (!res.ok) {
@@ -553,9 +565,13 @@ async function loadData({ force = false } = {}) {
       state.selected = state.coins[0].asset;
     }
 
-    $("updatedAt").textContent = data.cached
+    const lsAt = state.coins[0]?.analysis?.sentiment?.ls_updated_at;
+    const base = data.cached
       ? `캐시 · ${fmtTime(data.generated_at)} (${data.cache_age_sec ?? 0}s)`
       : `갱신 · ${fmtTime(data.generated_at)}`;
+    $("updatedAt").textContent = lsAt
+      ? `${base} · L/S 5m ${fmtTime(lsAt)}`
+      : `${base} · L/S 5m · 자동 1분`;
 
     if (data.errors?.length) {
       const soft = data.errors.filter((e) => !String(e.error).includes("429") || !data.coins?.length);
@@ -573,8 +589,11 @@ async function loadData({ force = false } = {}) {
     render();
   } catch (e) {
     $("loading").classList.add("hidden");
-    $("errorBox").textContent = `데이터 로드 실패: ${e.message}`;
-    $("errorBox").classList.remove("hidden");
+    // 자동 폴링 실패 시 기존 화면 유지 (잠깐 네트워크 끊김 허용)
+    if (!silent || !state.coins.length) {
+      $("errorBox").textContent = `데이터 로드 실패: ${e.message}`;
+      $("errorBox").classList.remove("hidden");
+    }
     if (state.coins.length) {
       $("app").classList.remove("hidden");
       render();
@@ -589,6 +608,22 @@ async function loadData({ force = false } = {}) {
   }
 }
 
+function startAutoRefresh() {
+  if (state.autoTimer) clearInterval(state.autoTimer);
+  state.autoTimer = setInterval(() => {
+    if (document.visibilityState === "hidden") return;
+    loadData({ force: false, silent: true });
+  }, AUTO_REFRESH_MS);
+}
+
 $("refreshBtn").addEventListener("click", () => loadData({ force: true }));
-// 첫 방문 시 1회 로드. 이후 요청은 새로고침 버튼만 (자동 주기 갱신 없음)
+document.addEventListener("visibilitychange", () => {
+  // 탭 복귀 시 최신값 (캐시 만료됐으면 자연 갱신, 아니면 캐시 표시)
+  if (document.visibilityState === "visible") {
+    loadData({ force: false, silent: true });
+  }
+});
+
+// 첫 방문 1회 + 1분마다 자동 갱신 (탭이 보일 때만)
 loadData({ force: false });
+startAutoRefresh();

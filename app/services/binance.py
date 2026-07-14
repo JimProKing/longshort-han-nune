@@ -17,6 +17,11 @@ SYMBOLS = {
     "XRP": "XRPUSDT",
 }
 
+# Public L/S account ratios are time-bucketed. 5m is the finest Binance offers
+# (true tick-level long/short % is not exposed on free REST).
+LS_PERIOD = "5m"
+LS_HISTORY_LIMIT = 72  # 6h of 5m bars
+
 # Reasonable timeouts for Railway / shared hosting
 TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 
@@ -66,7 +71,10 @@ async def fetch_klines(
 
 
 async def fetch_global_ls_ratio(
-    client: httpx.AsyncClient, symbol: str, period: str = "1h", limit: int = 24
+    client: httpx.AsyncClient,
+    symbol: str,
+    period: str = LS_PERIOD,
+    limit: int = LS_HISTORY_LIMIT,
 ) -> list[dict]:
     raw = await _get(
         client,
@@ -85,7 +93,10 @@ async def fetch_global_ls_ratio(
 
 
 async def fetch_top_trader_ls_ratio(
-    client: httpx.AsyncClient, symbol: str, period: str = "1h", limit: int = 24
+    client: httpx.AsyncClient,
+    symbol: str,
+    period: str = LS_PERIOD,
+    limit: int = LS_HISTORY_LIMIT,
 ) -> list[dict]:
     raw = await _get(
         client,
@@ -104,7 +115,10 @@ async def fetch_top_trader_ls_ratio(
 
 
 async def fetch_top_trader_position_ratio(
-    client: httpx.AsyncClient, symbol: str, period: str = "1h", limit: int = 24
+    client: httpx.AsyncClient,
+    symbol: str,
+    period: str = LS_PERIOD,
+    limit: int = LS_HISTORY_LIMIT,
 ) -> list[dict]:
     raw = await _get(
         client,
@@ -123,7 +137,10 @@ async def fetch_top_trader_position_ratio(
 
 
 async def fetch_taker_ls_ratio(
-    client: httpx.AsyncClient, symbol: str, period: str = "1h", limit: int = 24
+    client: httpx.AsyncClient,
+    symbol: str,
+    period: str = LS_PERIOD,
+    limit: int = LS_HISTORY_LIMIT,
 ) -> list[dict]:
     raw = await _get(
         client,
@@ -180,10 +197,10 @@ async def fetch_symbol_bundle(symbol: str) -> dict:
             fetch_klines(client, symbol, "4h", 200),
             fetch_klines(client, symbol, "1d", 120),
             fetch_klines(client, symbol, "1h", 100),
-            fetch_global_ls_ratio(client, symbol, "1h", 24),
-            fetch_top_trader_ls_ratio(client, symbol, "1h", 24),
-            fetch_top_trader_position_ratio(client, symbol, "1h", 24),
-            fetch_taker_ls_ratio(client, symbol, "1h", 24),
+            fetch_global_ls_ratio(client, symbol),
+            fetch_top_trader_ls_ratio(client, symbol),
+            fetch_top_trader_position_ratio(client, symbol),
+            fetch_taker_ls_ratio(client, symbol),
             fetch_open_interest(client, symbol),
             fetch_funding_rate(client, symbol),
         )

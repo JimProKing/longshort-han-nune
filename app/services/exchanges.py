@@ -155,14 +155,14 @@ async def fetch_binance_exchange_slice(
     # 요청을 3묶음으로 나눠 429 완화 (한 심볼에 11개 동시 호출 금지)
     ticker, global_ls, funding, oi_live = await asyncio.gather(
         fetch_ticker(client, symbol),
-        fetch_global_ls_ratio(client, symbol, "1h", 24),
+        fetch_global_ls_ratio(client, symbol),
         fetch_funding_rate(client, symbol),
         fetch_open_interest(client, symbol),
     )
     top_account, top_position, taker, oi_val = await asyncio.gather(
-        fetch_top_trader_ls_ratio(client, symbol, "1h", 24),
-        fetch_top_trader_position_ratio(client, symbol, "1h", 24),
-        fetch_taker_ls_ratio(client, symbol, "1h", 24),
+        fetch_top_trader_ls_ratio(client, symbol),
+        fetch_top_trader_position_ratio(client, symbol),
+        fetch_taker_ls_ratio(client, symbol),
         fetch_binance_oi_value(client, symbol),
     )
     k4, k1d, k1h = await asyncio.gather(
