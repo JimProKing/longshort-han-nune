@@ -6,16 +6,14 @@ from typing import Any
 
 import httpx
 
+from app.services.assets import CRYPTO_SYMBOLS
 from app.services.http_util import get_json
 
 FAPI = "https://fapi.binance.com"
 FUTURES_DATA = "https://fapi.binance.com/futures/data"
 
-SYMBOLS = {
-    "BTC": "BTCUSDT",
-    "ETH": "ETHUSDT",
-    "XRP": "XRPUSDT",
-}
+# Backward-compatible export (crypto perpetuals only)
+SYMBOLS = CRYPTO_SYMBOLS
 
 # Public L/S account ratios are time-bucketed. 5m is the finest Binance offers
 # (true tick-level long/short % is not exposed on free REST).

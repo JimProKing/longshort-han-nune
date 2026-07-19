@@ -9,7 +9,7 @@ from app.services.exchanges import fetch_symbol_bundle
 
 
 async def main():
-    for asset in ["BTC", "ETH", "XRP"]:
+    for asset in ["BTC", "ETH", "XRP", "ADA", "XLM", "BCH", "ETC", "SAMSUNG", "SKHYNIX", "HYUNDAI"]:
         b = await fetch_symbol_bundle(asset)
         a = analyze_symbol(b)
         s = a["sentiment"]

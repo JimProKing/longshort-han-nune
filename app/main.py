@@ -11,7 +11,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.services.analysis import analyze_symbol
-from app.services.binance import SYMBOLS, TIMEOUT
+from app.services.assets import ASSET_ORDER, ASSET_META, assert_known, display_symbol, is_crypto
+from app.services.binance import TIMEOUT
 from app.services.exchanges import (
     fetch_hyperliquid_all,
     fetch_kraken_all,
@@ -24,8 +25,8 @@ STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(
     title="Crypto LS Analyzer",
-    description="BTC / ETH / XRP 무기한 롱숏 비율 · 지지선 · 전략 분석",
-    version="1.0.1",
+    description="코인 무기한 롱숏 · 국내주식 지지/저항 · 진입 시나리오",
+    version="1.1.0",
 )
 
 # In-memory cache (Railway single instance)
@@ -57,20 +58,28 @@ async def _analyze_one(
     kr_all: dict | None,
     prefer_bybit: bool,
 ) -> dict:
-    symbol = SYMBOLS[asset]
+    asset = assert_known(asset)
+    symbol = display_symbol(asset)
     try:
+        # Stocks don't need HL/Kraken side data
+        use_hl = hl_all if is_crypto(asset) else {}
+        use_kr = kr_all if is_crypto(asset) else {}
         bundle = await fetch_symbol_bundle(
             asset,
             client=client,
-            hl_all=hl_all,
-            kr_all=kr_all,
+            hl_all=use_hl if is_crypto(asset) else {},
+            kr_all=use_kr if is_crypto(asset) else {},
             prefer_bybit=prefer_bybit,
         )
         analysis = analyze_symbol(bundle)
         strategies = build_strategies(analysis)
+        meta = ASSET_META.get(asset) or {}
         return {
             "asset": asset,
             "symbol": symbol,
+            "name": meta.get("name_ko") or meta.get("name"),
+            "asset_type": meta.get("type") or analysis.get("asset_type"),
+            "currency": analysis.get("currency") or meta.get("currency"),
             "primary_source": bundle.get("primary_source"),
             "analysis": analysis,
             "strategies": strategies,
@@ -82,7 +91,18 @@ async def _analyze_one(
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "assets": list(SYMBOLS.keys())}
+    return {
+        "ok": True,
+        "assets": list(ASSET_ORDER),
+        "meta": {
+            a: {
+                "type": ASSET_META[a]["type"],
+                "name": ASSET_META[a].get("name_ko") or ASSET_META[a].get("name"),
+                "currency": ASSET_META[a].get("currency"),
+            }
+            for a in ASSET_ORDER
+        },
+    }
 
 
 @app.get("/api/analyze")
@@ -99,15 +119,18 @@ async def analyze_all(
             return {**data, "cached": True, "cache_age_sec": int(now - ts)}
 
     prefer_bybit = now < _prefer_bybit_until
-    coins = []
-    errors = []
+    coins: list[dict] = []
+    errors: list[dict] = []
+    by_asset: dict[str, dict] = {}
 
     async with _client() as client:
         # HL / Kraken 은 코인마다 3번 치지 않고 1번만
         hl_all, kr_all = await _load_sides(client)
 
-        # BTC→ETH→XRP 순차 처리 (Binance 429 방지)
-        for asset in ("BTC", "ETH", "XRP"):
+        # 코인: 순차 (Binance 429 방지)
+        for asset in ASSET_ORDER:
+            if not is_crypto(asset):
+                continue
             try:
                 row = await _analyze_one(
                     asset,
@@ -116,8 +139,7 @@ async def analyze_all(
                     kr_all=kr_all if isinstance(kr_all, dict) else None,
                     prefer_bybit=prefer_bybit,
                 )
-                coins.append(row)
-                # Binance 실패 후 Bybit으로 갔으면 쿨다운
+                by_asset[asset] = row
                 if row.get("primary_source") == "bybit":
                     _prefer_bybit_until = time.time() + PREFER_BYBIT_COOLDOWN_SEC
                     prefer_bybit = True
@@ -128,6 +150,33 @@ async def analyze_all(
                     _prefer_bybit_until = time.time() + PREFER_BYBIT_COOLDOWN_SEC
                     prefer_bybit = True
 
+        # 주식: Yahoo — 병렬 가능
+        import asyncio
+
+        stock_assets = [a for a in ASSET_ORDER if not is_crypto(a)]
+
+        async def _stock_one(asset: str):
+            return await _analyze_one(
+                asset,
+                client=client,
+                hl_all={},
+                kr_all={},
+                prefer_bybit=False,
+            )
+
+        if stock_assets:
+            results = await asyncio.gather(
+                *[_stock_one(a) for a in stock_assets],
+                return_exceptions=True,
+            )
+            for asset, res in zip(stock_assets, results):
+                if isinstance(res, Exception):
+                    errors.append({"asset": asset, "error": str(res)})
+                else:
+                    by_asset[asset] = res
+
+    coins = [by_asset[a] for a in ASSET_ORDER if a in by_asset]
+
     if not coins:
         err_txt = " · ".join(f"{e['asset']}: {e['error']}" for e in errors) or "unknown"
         raise HTTPException(status_code=502, detail=f"전체 조회 실패 — {err_txt}")
@@ -137,7 +186,7 @@ async def analyze_all(
         "coins": coins,
         "errors": errors,
         "cached": False,
-        "source": " · ".join(s.title() for s in sources) + " · Hyperliquid · Kraken",
+        "source": " · ".join(s.title() for s in sources if s) + " · Hyperliquid · Kraken",
         "primary_sources": sources,
         "generated_at": int(now * 1000),
     }
@@ -162,9 +211,13 @@ async def _load_sides(client: httpx.AsyncClient):
 async def analyze_asset(asset: str, refresh: bool = False):
     global _prefer_bybit_until
 
-    asset = asset.upper()
-    if asset not in SYMBOLS:
-        raise HTTPException(status_code=404, detail=f"지원 자산: {list(SYMBOLS.keys())}")
+    try:
+        asset = assert_known(asset)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"지원 자산: {list(ASSET_ORDER)}",
+        ) from None
 
     cache_key = asset
     now = time.time()
@@ -175,7 +228,10 @@ async def analyze_asset(asset: str, refresh: bool = False):
 
     prefer_bybit = now < _prefer_bybit_until
     async with _client() as client:
-        hl_all, kr_all = await _load_sides(client)
+        if is_crypto(asset):
+            hl_all, kr_all = await _load_sides(client)
+        else:
+            hl_all, kr_all = {}, {}
         try:
             data = await _analyze_one(
                 asset,

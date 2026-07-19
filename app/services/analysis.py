@@ -6,6 +6,20 @@ from statistics import mean
 from typing import Any
 
 
+def _price_decimals(price: float) -> int:
+    """Round level/prices by magnitude (KRW stocks need 0dp)."""
+    p = abs(float(price))
+    if p >= 1000:
+        return 0
+    if p >= 100:
+        return 1
+    if p >= 10:
+        return 2
+    if p >= 1:
+        return 4
+    return 6
+
+
 def _closes(klines: list[dict]) -> list[float]:
     return [float(k["close"]) for k in klines]
 
@@ -126,11 +140,38 @@ def sentiment_from_ratios(
     top_position: list[dict],
     taker: list[dict],
     funding_rate: float,
+    *,
+    asset_type: str = "crypto",
 ) -> dict[str, Any]:
     """
     Composite market sentiment.
     High retail long ratio + negative funding often = crowded long (risk of dump).
     """
+    # Equities: no public account L/S — pure technical / neutral bias
+    if asset_type == "stock":
+        return {
+            "global_long_pct": None,
+            "global_short_pct": None,
+            "global_ls_ratio": None,
+            "top_account_long_pct": None,
+            "top_account_ls_ratio": None,
+            "top_position_long_pct": None,
+            "top_position_ls_ratio": None,
+            "taker_buy_sell_ratio": None,
+            "funding_rate": None,
+            "funding_rate_pct": None,
+            "composite_score": 0.0,
+            "label": "기술분석 중심 (L/S 없음)",
+            "bias": "neutral",
+            "crowded_long": False,
+            "crowded_short": False,
+            "ratio_trend": 0.0,
+            "ls_period": None,
+            "ls_updated_at": None,
+            "ls_available": False,
+            "history": {"global_ls": [], "taker": []},
+        }
+
     g = global_ls[-1] if global_ls else None
     ta = top_account[-1] if top_account else None
     tp = top_position[-1] if top_position else None
@@ -147,11 +188,12 @@ def sentiment_from_ratios(
     top_pos_ratio = tp["long_short_ratio"] if tp else 1.0
 
     taker_ratio = tk["buy_sell_ratio"] if tk else 1.0
+    fr = float(funding_rate or 0.0)
 
     retail_bias = (global_long_pct - 50) * 2
     whale_bias = (top_pos_long - 50) * 2
     flow_bias = (taker_ratio - 1.0) * 50
-    funding_bias = funding_rate * 10000
+    funding_bias = fr * 10000
 
     ratio_trend = 0.0
     if len(global_ls) >= 12:
@@ -178,8 +220,8 @@ def sentiment_from_ratios(
         label = "중립 / 혼조"
         bias = "neutral"
 
-    crowded_long = global_long_pct >= 58 and funding_rate > 0.00005
-    crowded_short = global_short_pct >= 58 and funding_rate < -0.00005
+    crowded_long = global_long_pct >= 58 and fr > 0.00005
+    crowded_short = global_short_pct >= 58 and fr < -0.00005
 
     ls_updated_at = int(g["timestamp"]) if g and g.get("timestamp") else None
 
@@ -192,8 +234,8 @@ def sentiment_from_ratios(
         "top_position_long_pct": round(top_pos_long, 2),
         "top_position_ls_ratio": round(top_pos_ratio, 4),
         "taker_buy_sell_ratio": round(taker_ratio, 4),
-        "funding_rate": funding_rate,
-        "funding_rate_pct": round(funding_rate * 100, 4),
+        "funding_rate": fr,
+        "funding_rate_pct": round(fr * 100, 4),
         "composite_score": round(composite, 1),
         "label": label,
         "bias": bias,
@@ -203,6 +245,7 @@ def sentiment_from_ratios(
         # Exchange public L/S is bucketed; 5m is finest available on free REST
         "ls_period": "5m",
         "ls_updated_at": ls_updated_at,
+        "ls_available": True,
         "history": {
             "global_ls": [
                 {
@@ -284,9 +327,10 @@ def build_support_resistance(klines_4h: list[dict], klines_1d: list[dict], price
             ]
             if any(abs(lv - m) / price < 0.004 for m in major_refs):
                 strength = "major"
+            dp = _price_decimals(price)
             result.append(
                 {
-                    "price": round(lv, 6 if price < 10 else 2),
+                    "price": round(lv, dp),
                     "distance_pct": round(dist, 2),
                     "strength": strength,
                 }
@@ -295,17 +339,18 @@ def build_support_resistance(klines_4h: list[dict], klines_1d: list[dict], price
 
     supports = unique_sorted(support_candidates, below=True)
     resistances = unique_sorted(resistance_candidates, below=False)
+    dp = _price_decimals(price)
 
     return {
         "supports": supports,
         "resistances": resistances,
-        "pivots": {k: round(v, 6 if price < 10 else 2) for k, v in pivots.items()},
-        "fib": {k: round(v, 6 if price < 10 else 2) for k, v in fib.items()},
-        "emas": emas,
-        "range_high": round(sh, 6 if price < 10 else 2),
-        "range_low": round(sl, 6 if price < 10 else 2),
-        "atr_4h": round(atr(klines_4h, 14), 6 if price < 10 else 2),
-        "atr_1d": round(atr(klines_1d, 14), 6 if price < 10 else 2),
+        "pivots": {k: round(v, dp) for k, v in pivots.items()},
+        "fib": {k: round(v, dp) for k, v in fib.items()},
+        "emas": {k: round(v, dp) for k, v in emas.items()},
+        "range_high": round(sh, dp),
+        "range_low": round(sl, dp),
+        "atr_4h": round(atr(klines_4h, 14), dp),
+        "atr_1d": round(atr(klines_1d, 14), dp),
     }
 
 
@@ -352,22 +397,30 @@ def _sanitize_exchange(ex: dict | None) -> dict | None:
 
 def analyze_symbol(bundle: dict) -> dict:
     price = bundle["ticker"]["price"]
-    funding = bundle["funding"]["last_funding_rate"]
+    funding = float((bundle.get("funding") or {}).get("last_funding_rate") or 0.0)
+    asset_type = bundle.get("asset_type") or "crypto"
+    currency = bundle.get("currency") or ("KRW" if asset_type == "stock" else "USD")
 
     sentiment = sentiment_from_ratios(
-        bundle["global_ls"],
-        bundle["top_account_ls"],
-        bundle["top_position_ls"],
-        bundle["taker_ls"],
+        bundle.get("global_ls") or [],
+        bundle.get("top_account_ls") or [],
+        bundle.get("top_position_ls") or [],
+        bundle.get("taker_ls") or [],
         funding,
+        asset_type=asset_type,
     )
-    levels = build_support_resistance(bundle["klines_4h"], bundle["klines_1d"], price)
+    levels = build_support_resistance(
+        bundle.get("klines_4h") or [],
+        bundle.get("klines_1d") or [],
+        price,
+    )
 
     exchanges = bundle.get("exchanges") or {}
     bn = _sanitize_exchange(exchanges.get("binance"))
     bb = _sanitize_exchange(exchanges.get("bybit"))
     hl = _sanitize_exchange(exchanges.get("hyperliquid"))
     kr = _sanitize_exchange(exchanges.get("kraken"))
+    krx = _sanitize_exchange(exchanges.get("krx")) if exchanges.get("krx") else None
 
     # Enrich sentiment with notional amounts (primary exchange)
     primary = None
@@ -375,6 +428,8 @@ def analyze_symbol(bundle: dict) -> dict:
         primary = bn
     elif bb and bb.get("ok"):
         primary = bb
+    elif krx and krx.get("ok"):
+        primary = krx
 
     if primary:
         sentiment["oi_usd"] = primary.get("oi_usd")
@@ -388,28 +443,35 @@ def analyze_symbol(bundle: dict) -> dict:
         sentiment["notional_note"] = primary.get("notional_note")
         sentiment["ls_source"] = primary.get("exchange")
 
+    out_exchanges = {
+        "binance": bn,
+        "bybit": bb,
+        "hyperliquid": hl,
+        "kraken": kr,
+    }
+    if krx:
+        out_exchanges["krx"] = krx
+
     return {
         "symbol": bundle["symbol"],
+        "asset_type": asset_type,
+        "currency": currency,
         "price": price,
         "change_24h_pct": bundle["ticker"]["change_pct"],
         "high_24h": bundle["ticker"]["high"],
         "low_24h": bundle["ticker"]["low"],
         "volume_24h": bundle["ticker"]["volume"],
         "quote_volume_24h": bundle["ticker"]["quote_volume"],
-        "open_interest": bundle["open_interest"]["open_interest"],
+        "open_interest": (bundle.get("open_interest") or {}).get("open_interest"),
         "open_interest_usd": (primary or {}).get("oi_usd"),
-        "mark_price": bundle["funding"]["mark_price"],
+        "mark_price": (bundle.get("funding") or {}).get("mark_price") or price,
         "primary_source": bundle.get("primary_source"),
         "sentiment": sentiment,
         "levels": levels,
-        "exchanges": {
-            "binance": bn,
-            "bybit": bb,
-            "hyperliquid": hl,
-            "kraken": kr,
-        },
+        "exchanges": out_exchanges,
         "total_oi_usd": _round_money(bundle.get("total_oi_usd")),
         "klines_1h_spark": [
-            {"t": k["open_time"], "c": k["close"]} for k in bundle["klines_1h"][-48:]
+            {"t": k["open_time"], "c": k["close"]}
+            for k in (bundle.get("klines_1h") or [])[-48:]
         ],
     }

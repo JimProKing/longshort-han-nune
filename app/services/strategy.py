@@ -7,7 +7,7 @@ from typing import Any
 
 def _round_price(price: float, ref: float) -> float:
     if ref >= 1000:
-        return round(price, 1)
+        return round(price, 0)  # KRW equities etc.
     if ref >= 100:
         return round(price, 2)
     if ref >= 1:
@@ -200,15 +200,22 @@ def _confidence(side: str, sentiment: dict, analysis: dict) -> tuple[int, str]:
     score = 50
     reasons: list[str] = []
     bias = sentiment.get("bias", "neutral")
-    composite = float(sentiment.get("composite_score", 0))
-    global_long = float(sentiment.get("global_long_pct", 50))
-    funding = float(sentiment.get("funding_rate", 0))
+    composite = float(sentiment.get("composite_score") or 0)
+    gl_raw = sentiment.get("global_long_pct")
+    global_long = float(gl_raw) if gl_raw is not None else 50.0
+    fr_raw = sentiment.get("funding_rate")
+    funding = float(fr_raw) if fr_raw is not None else 0.0
+    has_ls = bool(sentiment.get("ls_available", gl_raw is not None))
     price = float(analysis["price"])
     emas = analysis["levels"].get("emas") or {}
-    change = float(analysis.get("change_24h_pct", 0))
+    change = float(analysis.get("change_24h_pct") or 0)
+    is_stock = analysis.get("asset_type") == "stock"
 
     ema20 = emas.get("ema20")
     ema50 = emas.get("ema50")
+
+    if is_stock:
+        reasons.append("국내 주식 — 기술 레벨·EMA 기반 (선물 롱/숏 비율 없음)")
 
     if side == "long":
         if bias == "bullish":
@@ -237,10 +244,10 @@ def _confidence(side: str, sentiment: dict, analysis: dict) -> tuple[int, str]:
             score -= 12
             reasons.append("롱 과밀 — 청산 위험")
 
-        if funding < -0.00005:
+        if has_ls and funding < -0.00005:
             score += 5
             reasons.append("펀딩 음수 — 숏이 롱에게 지불")
-        if global_long > 62:
+        if has_ls and global_long > 62:
             score -= 8
             reasons.append(f"리테일 롱 비중 과다 ({global_long:.1f}%)")
 
@@ -274,10 +281,10 @@ def _confidence(side: str, sentiment: dict, analysis: dict) -> tuple[int, str]:
             score -= 12
             reasons.append("숏 과밀 — 숏스퀴즈 위험")
 
-        if funding > 0.0001:
+        if has_ls and funding > 0.0001:
             score += 5
             reasons.append("펀딩 과열 — 롱 비용 부담")
-        if global_long < 40:
+        if has_ls and global_long < 40:
             score -= 8
             reasons.append(f"리테일 숏 비중 과다 (롱 {global_long:.1f}%)")
 
@@ -285,14 +292,16 @@ def _confidence(side: str, sentiment: dict, analysis: dict) -> tuple[int, str]:
             score += 4
             reasons.append("단기 급등 후 되돌림 여지")
 
-    # Whale vs retail divergence
-    top_pos = float(sentiment.get("top_position_long_pct", 50))
-    if side == "long" and top_pos > global_long + 5:
-        score += 6
-        reasons.append("탑트레이더 포지션이 리테일보다 롱 우세")
-    if side == "short" and top_pos < global_long - 5:
-        score += 6
-        reasons.append("탑트레이더 포지션이 리테일보다 숏 우세")
+    # Whale vs retail divergence (crypto L/S only)
+    if has_ls:
+        tp_raw = sentiment.get("top_position_long_pct")
+        top_pos = float(tp_raw) if tp_raw is not None else global_long
+        if side == "long" and top_pos > global_long + 5:
+            score += 6
+            reasons.append("탑트레이더 포지션이 리테일보다 롱 우세")
+        if side == "short" and top_pos < global_long - 5:
+            score += 6
+            reasons.append("탑트레이더 포지션이 리테일보다 숏 우세")
 
     score = int(max(15, min(90, score + abs(composite) * 0.05)))
     if not reasons:
@@ -322,7 +331,7 @@ def build_strategies(analysis: dict) -> dict:
         "short": short_s,
         "preference": preferred_side(long_s, short_s),
         "disclaimer": (
-            "Binance 공개 데이터 기준으로 직접 짜 둔 참고용 분석입니다. "
-            "투자 자문이 아니며, 레버리지·청산·슬리피지는 본인 책임으로 확인하세요."
+            "코인(Binance/Bybit 공개 선물) · 국내주식(Yahoo/KRX 시세) 기준 참고용 분석입니다. "
+            "투자 자문이 아니며, 레버리지·청산·슬리피지·호가 괴리는 본인 책임으로 확인하세요."
         ),
     }

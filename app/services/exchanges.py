@@ -8,10 +8,10 @@ from typing import Any
 import httpx
 
 from app.services import bybit as bybit_svc
+from app.services.assets import CRYPTO_SYMBOLS, HL_COINS, KRAKEN_SYMBOLS, is_stock
 from app.services.binance import (
     FAPI,
     FUTURES_DATA,
-    SYMBOLS as BINANCE_SYMBOLS,
     TIMEOUT,
     fetch_funding_rate,
     fetch_global_ls_ratio,
@@ -22,16 +22,12 @@ from app.services.binance import (
     fetch_top_trader_ls_ratio,
     fetch_top_trader_position_ratio,
 )
+from app.services.stocks import fetch_stock_bundle
 
 HL_INFO = "https://api.hyperliquid.xyz/info"
 KRAKEN_TICKERS = "https://futures.kraken.com/derivatives/api/v3/tickers"
 
-HL_COINS = {"BTC": "BTC", "ETH": "ETH", "XRP": "XRP"}
-KRAKEN_SYMBOLS = {
-    "BTC": "PF_XBTUSD",
-    "ETH": "PF_ETHUSD",
-    "XRP": "PF_XRPUSD",
-}
+BINANCE_SYMBOLS = CRYPTO_SYMBOLS
 
 
 from app.services.http_util import get_json, post_json
@@ -261,16 +257,12 @@ async def fetch_symbol_bundle(
     prefer_bybit: bool = False,
 ) -> dict:
     """
-    Full multi-exchange bundle for one asset (BTC/ETH/XRP).
+    Full multi-exchange bundle for one asset.
 
-    Primary: Binance (L/S, klines…) → 실패/429 시 Bybit
-    prefer_bybit=True 이면 Bybit을 먼저 (클라우드 IP 안정용)
-    Side: Hyperliquid, Kraken (OI / funding / volume) — 외부에서 1회 주입 가능
+    Crypto: Binance (L/S, klines…) → 실패/429 시 Bybit; side Hyperliquid / Kraken
+    Stock: Yahoo Finance (KRX) — 지지/저항·시나리오 (계정 L/S 없음)
     """
     asset = asset.upper()
-    if asset not in BINANCE_SYMBOLS:
-        raise ValueError(f"Unsupported asset: {asset}")
-    symbol = BINANCE_SYMBOLS[asset]
 
     headers = {
         "User-Agent": "longshort-han-nune/1.0 (+https://github.com/JimProKing/longshort-han-nune)",
@@ -283,6 +275,14 @@ async def fetch_symbol_bundle(
 
     assert client is not None
     try:
+        if is_stock(asset):
+            bundle = await fetch_stock_bundle(client, asset)
+            return bundle
+
+        if asset not in BINANCE_SYMBOLS:
+            raise ValueError(f"Unsupported asset: {asset}")
+        symbol = BINANCE_SYMBOLS[asset]
+
         if hl_all is None or kr_all is None:
             hl_task = asyncio.create_task(fetch_hyperliquid_all(client))
             kr_task = asyncio.create_task(fetch_kraken_all(client))
@@ -363,6 +363,8 @@ async def fetch_symbol_bundle(
         "symbol": symbol,
         "primary_source": source,
         "primary_error": primary_err,
+        "asset_type": "crypto",
+        "currency": "USD",
         "ticker": raw["ticker"],
         "klines_4h": raw.get("klines_4h") or [],
         "klines_1d": raw.get("klines_1d") or [],
