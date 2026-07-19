@@ -1,4 +1,4 @@
-"""Central asset registry — crypto perpetuals + KR equities."""
+"""Central asset registry — crypto + TradFi stock perpetuals (Binance/Bybit)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ ASSET_ORDER: list[str] = [
     "HYUNDAI",
 ]
 
-# Binance / Bybit USD-M perpetual symbols
+# Crypto USD-M perpetuals
 CRYPTO_SYMBOLS: dict[str, str] = {
     "BTC": "BTCUSDT",
     "ETH": "ETHUSDT",
@@ -31,7 +31,17 @@ CRYPTO_SYMBOLS: dict[str, str] = {
     "ETC": "ETCUSDT",
 }
 
-# Hyperliquid coin names
+# Binance/Bybit TradFi stock-linked perpetuals (USDT, not KRX cash shares)
+STOCK_PERP_SYMBOLS: dict[str, str] = {
+    "SAMSUNG": "SAMSUNGUSDT",
+    "SKHYNIX": "SKHYNIXUSDT",
+    "HYUNDAI": "HYUNDAIUSDT",
+}
+
+# All assets that use the Binance/Bybit L/S pipeline
+PERP_SYMBOLS: dict[str, str] = {**CRYPTO_SYMBOLS, **STOCK_PERP_SYMBOLS}
+
+# Hyperliquid coin names (crypto only)
 HL_COINS: dict[str, str] = {
     "BTC": "BTC",
     "ETH": "ETH",
@@ -42,7 +52,7 @@ HL_COINS: dict[str, str] = {
     "ETC": "ETC",
 }
 
-# Kraken Futures perpetual symbols
+# Kraken Futures perpetual symbols (crypto only)
 KRAKEN_SYMBOLS: dict[str, str] = {
     "BTC": "PF_XBTUSD",
     "ETH": "PF_ETHUSD",
@@ -53,12 +63,15 @@ KRAKEN_SYMBOLS: dict[str, str] = {
     "ETC": "PF_ETCUSD",
 }
 
-# Yahoo Finance tickers (KRX)
-STOCK_SYMBOLS: dict[str, str] = {
+# Optional KRX reference tickers (Yahoo) — not used for L/S
+STOCK_KRX_SYMBOLS: dict[str, str] = {
     "SAMSUNG": "005930.KS",
     "SKHYNIX": "000660.KS",
     "HYUNDAI": "005380.KS",
 }
+
+# Backward-compatible alias
+STOCK_SYMBOLS = STOCK_KRX_SYMBOLS
 
 ASSET_META: dict[str, dict[str, Any]] = {
     "BTC": {
@@ -121,28 +134,31 @@ ASSET_META: dict[str, dict[str, Any]] = {
         "type": "stock",
         "name": "Samsung Electronics",
         "name_ko": "삼성전자",
-        "currency": "KRW",
+        "currency": "USD",
         "color": "#1428a0",
         "cls": "samsung",
-        "exchange": "KRX",
+        "exchange": "Binance TradFi",
+        "note": "Binance/Bybit SAMSUNGUSDT 무기한 (KRX 현물 아님)",
     },
     "SKHYNIX": {
         "type": "stock",
         "name": "SK hynix",
         "name_ko": "SK하이닉스",
-        "currency": "KRW",
+        "currency": "USD",
         "color": "#ea002c",
         "cls": "skhynix",
-        "exchange": "KRX",
+        "exchange": "Binance TradFi",
+        "note": "Binance/Bybit SKHYNIXUSDT 무기한 (KRX 현물 아님)",
     },
     "HYUNDAI": {
         "type": "stock",
         "name": "Hyundai Motor",
         "name_ko": "현대차",
-        "currency": "KRW",
+        "currency": "USD",
         "color": "#002c5f",
         "cls": "hyundai",
-        "exchange": "KRX",
+        "exchange": "Binance TradFi",
+        "note": "Binance/Bybit HYUNDAIUSDT 무기한 (KRX 현물 아님)",
     },
 }
 
@@ -162,20 +178,28 @@ def is_stock(asset: str) -> bool:
     return asset_type(asset) == "stock"
 
 
+def is_perp(asset: str) -> bool:
+    """True if asset has Binance/Bybit USDT perpetual (crypto or TradFi stock)."""
+    return asset.upper() in PERP_SYMBOLS
+
+
+def perp_symbol(asset: str) -> str:
+    return PERP_SYMBOLS[asset.upper()]
+
+
 def crypto_symbol(asset: str) -> str:
     return CRYPTO_SYMBOLS[asset.upper()]
 
 
 def stock_symbol(asset: str) -> str:
-    return STOCK_SYMBOLS[asset.upper()]
+    """KRX Yahoo ticker (reference only)."""
+    return STOCK_KRX_SYMBOLS[asset.upper()]
 
 
 def display_symbol(asset: str) -> str:
     a = asset.upper()
-    if a in CRYPTO_SYMBOLS:
-        return CRYPTO_SYMBOLS[a]
-    if a in STOCK_SYMBOLS:
-        return STOCK_SYMBOLS[a]
+    if a in PERP_SYMBOLS:
+        return PERP_SYMBOLS[a]
     return a
 
 

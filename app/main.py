@@ -124,13 +124,11 @@ async def analyze_all(
     by_asset: dict[str, dict] = {}
 
     async with _client() as client:
-        # HL / Kraken 은 코인마다 3번 치지 않고 1번만
+        # HL / Kraken 은 코인마다 1번만 (TradFi 주식 퍼프에는 없음)
         hl_all, kr_all = await _load_sides(client)
 
-        # 코인: 순차 (Binance 429 방지)
+        # 전체 순차 (Binance 429 방지) — 코인 + TradFi 주식 무기한
         for asset in ASSET_ORDER:
-            if not is_crypto(asset):
-                continue
             try:
                 row = await _analyze_one(
                     asset,
@@ -149,31 +147,6 @@ async def analyze_all(
                 if "429" in err:
                     _prefer_bybit_until = time.time() + PREFER_BYBIT_COOLDOWN_SEC
                     prefer_bybit = True
-
-        # 주식: Yahoo — 병렬 가능
-        import asyncio
-
-        stock_assets = [a for a in ASSET_ORDER if not is_crypto(a)]
-
-        async def _stock_one(asset: str):
-            return await _analyze_one(
-                asset,
-                client=client,
-                hl_all={},
-                kr_all={},
-                prefer_bybit=False,
-            )
-
-        if stock_assets:
-            results = await asyncio.gather(
-                *[_stock_one(a) for a in stock_assets],
-                return_exceptions=True,
-            )
-            for asset, res in zip(stock_assets, results):
-                if isinstance(res, Exception):
-                    errors.append({"asset": asset, "error": str(res)})
-                else:
-                    by_asset[asset] = res
 
     coins = [by_asset[a] for a in ASSET_ORDER if a in by_asset]
 
@@ -228,6 +201,7 @@ async def analyze_asset(asset: str, refresh: bool = False):
 
     prefer_bybit = now < _prefer_bybit_until
     async with _client() as client:
+        # HL/Kraken only useful for crypto; empty dict for stock perps is fine
         if is_crypto(asset):
             hl_all, kr_all = await _load_sides(client)
         else:

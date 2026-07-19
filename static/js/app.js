@@ -8,9 +8,9 @@ const ASSET_META = {
   XLM: { name: "스텔라루멘", color: "#14b6e7", cls: "xlm", type: "crypto", currency: "USD" },
   BCH: { name: "비트코인캐시", color: "#8dc351", cls: "bch", type: "crypto", currency: "USD" },
   ETC: { name: "이더리움클래식", color: "#328332", cls: "etc", type: "crypto", currency: "USD" },
-  SAMSUNG: { name: "삼성전자", color: "#1428a0", cls: "samsung", type: "stock", currency: "KRW" },
-  SKHYNIX: { name: "SK하이닉스", color: "#ea002c", cls: "skhynix", type: "stock", currency: "KRW" },
-  HYUNDAI: { name: "현대차", color: "#002c5f", cls: "hyundai", type: "stock", currency: "KRW" },
+  SAMSUNG: { name: "삼성전자", color: "#1428a0", cls: "samsung", type: "stock", currency: "USD" },
+  SKHYNIX: { name: "SK하이닉스", color: "#ea002c", cls: "skhynix", type: "stock", currency: "USD" },
+  HYUNDAI: { name: "현대차", color: "#002c5f", cls: "hyundai", type: "stock", currency: "USD" },
 };
 
 /** Near-realtime poll. L/S itself is 5m-bucketed by exchanges; we re-fetch often so OI/price and new 5m bars show up. */
@@ -38,17 +38,17 @@ function isStockAsset(asset, analysis) {
 function fmtPrice(n, asset, analysis) {
   if (n == null || Number.isNaN(n)) return "—";
   const x = Number(n);
-  const cur = assetCurrency(asset, analysis);
-  if (cur === "KRW" || x >= 1000) {
-    return x.toLocaleString("ko-KR", { maximumFractionDigits: 0 });
-  }
+  // TradFi stock perps (SAMSUNG ~$168, SKHYNIX ~$1k+) still USDT
   if (asset === "XRP" || asset === "ADA" || asset === "XLM" || x < 10) {
     return x.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 5 });
   }
   if (x < 100) {
     return x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   }
-  return x.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  if (x < 1000) {
+    return x.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  }
+  return x.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 /** Price with currency prefix */
@@ -239,44 +239,7 @@ function exchangeCard(def, ex) {
 }
 
 function exchangeRows(exchanges, totalOi, primarySource, analysis) {
-  if (isStockAsset(null, analysis) || primarySource === "yahoo") {
-    const krx = exchanges?.krx;
-    const price = krx?.mark_price ?? krx?.price ?? analysis?.price;
-    const vol = krx?.volume_24h_usd ?? analysis?.quote_volume_24h;
-    return `
-      <div class="exchange-card">
-        <div class="ex-total card" style="margin-bottom:0.85rem">
-          국내주식 (KRX) · 시세 소스 <strong>Yahoo Finance</strong>
-          <span class="muted"> · ${analysis?.symbol || ""}</span>
-        </div>
-        <div class="ex-grid" style="grid-template-columns:1fr">
-          <div class="ex-panel" style="--ex-accent:#1428a0">
-            <div class="ex-panel-head">
-              <span class="ex-dot" style="background:#1428a0"></span>
-              <strong>한국거래소</strong>
-              <span class="ex-sym">${analysis?.symbol || ""}</span>
-            </div>
-            <div class="ex-metrics">
-              <div>
-                <label>현재가</label>
-                <value>${fmtMoneyPrice(price, analysis?.symbol, analysis)}</value>
-              </div>
-              <div>
-                <label>일 거래대금(추정)</label>
-                <value>${fmtUsd(vol, true, "KRW")}</value>
-              </div>
-              <div>
-                <label>통화</label>
-                <value>KRW</value>
-              </div>
-            </div>
-            <div class="ex-ls-empty">계정 롱/숏 비율 · OI · 펀딩은 국내 현물에 없음</div>
-          </div>
-        </div>
-        <p class="ex-note">주식은 지지·저항·진입/손절/익절 시나리오만 제공합니다. 선물 롱숏 비율은 코인 탭에서 확인하세요.</p>
-      </div>`;
-  }
-
+  const stock = isStockAsset(null, analysis);
   const defs = [
     { key: "binance", name: "Binance", accent: "#f0b90b" },
     { key: "bybit", name: "Bybit", accent: "#f7a600" },
@@ -298,18 +261,19 @@ function exchangeRows(exchanges, totalOi, primarySource, analysis) {
 
   const hl = exchanges?.hyperliquid;
   const hlOk = hl && hl.ok;
-  const srcNote =
-    primarySource === "bybit"
+  const srcNote = stock
+    ? "삼성·SK하이닉스·현대차는 Binance/Bybit TradFi 주식 연동 무기한(USDT)입니다. KRX 현물 원화가 아니라 달러 선물 시세·롱숏입니다."
+    : primarySource === "bybit"
       ? "현재 서버 지역에서 Binance가 막혀 Bybit 롱/숏·차트를 사용 중입니다."
       : "롱/숏·차트 기본 소스: Binance (실패 시 Bybit 자동 전환).";
 
   return `
     <div class="exchange-card">
       <div class="ex-total card" style="margin-bottom:0.85rem">
-        OI 합계(주요+HL+Kraken) <strong>${fmtUsd(totalOi)}</strong>
+        OI 합계${stock ? "(Binance/Bybit)" : "(주요+HL+Kraken)"} <strong>${fmtUsd(totalOi)}</strong>
         <span class="muted"> · primary: ${(primarySource || "—").toUpperCase()}</span>
         ${
-          hlOk
+          !stock && hlOk
             ? `<div class="ex-hl-highlight">Hyperliquid OI <strong>${fmtUsd(hl.oi_usd)}</strong> · 펀딩 <strong style="color:${Number(hl.funding_rate) >= 0 ? "var(--green)" : "var(--red)"}">${fmtFunding(hl.funding_rate)}</strong> · 24h <strong>${fmtUsd(hl.volume_24h_usd)}</strong></div>`
             : ""
         }
@@ -319,7 +283,7 @@ function exchangeRows(exchanges, totalOi, primarySource, analysis) {
       </div>
       <p class="ex-note">
         ${srcNote}
-        Hyperliquid·Kraken은 OI·펀딩·24h 대금. 계정 롱/숏 % 는 Binance 또는 Bybit.
+        ${stock ? "" : "Hyperliquid·Kraken은 OI·펀딩·24h 대금. 계정 롱/숏 % 는 Binance 또는 Bybit."}
       </p>
     </div>`;
 }
@@ -402,9 +366,9 @@ function renderOverview() {
           </div>`
               : `<div class="ov-ls ov-ls-empty-bar"></div>
           <div class="ov-meta">
-            <span class="muted">주식</span>
-            <span>${s.label || "기술분석"}</span>
-            <span class="muted">L/S 없음</span>
+            <span class="muted">TradFi</span>
+            <span>${s.label || "—"}</span>
+            <span class="muted">L/S 대기</span>
           </div>`
           }
         </div>`;
@@ -533,37 +497,15 @@ function renderDetail() {
       </div>`
     : `
       <div class="card">
-        <div class="card-title">${titleName} · 국내주식 분석 범위</div>
-        <div class="bias-badge neutral">● ${s.label}</div>
-        <p class="ls-hint" style="margin-top:0.85rem">
-          삼성·SK하이닉스·현대차는 <strong>KRX 현물</strong>입니다.
-          선물 계정 롱/숏 비율·OI·펀딩은 제공되지 않으며,
-          Yahoo 시세 기준 <strong>지지·저항 · 진입/손절/익절</strong>만 제공합니다.
-        </p>
-        <div class="ratio-metrics" style="margin-top:0.85rem">
-          <div class="metric">
-            <label>종목코드</label>
-            <div class="val">${a.symbol || "—"}</div>
-          </div>
-          <div class="metric">
-            <label>통화</label>
-            <div class="val">KRW</div>
-          </div>
-          <div class="metric">
-            <label>데이터</label>
-            <div class="val">Yahoo · 기술분석</div>
-          </div>
-          <div class="metric">
-            <label>거래대금(추정)</label>
-            <div class="val">${fmtUsd(a.quote_volume_24h, true, "KRW")}</div>
-          </div>
-        </div>
+        <div class="card-title">${titleName} · L/S 데이터 없음</div>
+        <div class="bias-badge neutral">● ${s.label || "중립"}</div>
+        <p class="ls-hint" style="margin-top:0.85rem">계정 롱/숏 비율을 아직 받지 못했습니다. 새로고침 후 다시 확인해 주세요.</p>
       </div>`;
 
   $("detail").innerHTML = `
     <div class="grid-top">
       <div class="card">
-        <div class="card-title">${titleName} (${coin.asset}) 현재가 · 24시간</div>
+        <div class="card-title">${titleName} (${coin.asset}) 현재가 · 24시간${stock ? " · TradFi 무기한" : ""}</div>
         <div class="price-row">
           <span class="price">${fmtMoneyPrice(a.price, coin.asset, a)}</span>
           <span class="change ${chg >= 0 ? "up" : "down"}">${fmtPct(chg)}</span>
@@ -571,42 +513,41 @@ function renderDetail() {
         ${sparkline(a.klines_1h_spark)}
         <div class="stat-grid">
           <div class="stat">
-            <label>${stock ? "일 고가" : "24h 고가"}</label>
+            <label>24h 고가</label>
             <value>${fmtMoneyPrice(a.high_24h, coin.asset, a)}</value>
           </div>
           <div class="stat">
-            <label>${stock ? "일 저가" : "24h 저가"}</label>
+            <label>24h 저가</label>
             <value>${fmtMoneyPrice(a.low_24h, coin.asset, a)}</value>
           </div>
           <div class="stat">
-            <label>${stock ? "거래대금" : "Binance OI"}</label>
-            <value>${
-              stock
-                ? fmtUsd(a.quote_volume_24h, true, "KRW")
-                : fmtUsd(a.open_interest_usd || s.oi_usd)
-            }</value>
+            <label>Binance OI</label>
+            <value>${fmtUsd(a.open_interest_usd || s.oi_usd)}</value>
           </div>
           <div class="stat">
-            <label>${stock ? "자산유형" : "펀딩비 (BN)"}</label>
-            <value style="color:${stock ? "var(--text)" : fundColor}">${
-              stock ? "KRX 주식" : fmtPct(s.funding_rate_pct, 4)
-            }</value>
+            <label>펀딩비</label>
+            <value style="color:${fundColor}">${fmtPct(s.funding_rate_pct, 4)}</value>
           </div>
           <div class="stat">
             <label>ATR (4h)</label>
             <value>${fmtMoneyPrice(lv.atr_4h, coin.asset, a)}</value>
           </div>
           <div class="stat">
-            <label>${stock ? "시세 소스" : "3거래소 OI 합"}</label>
-            <value>${stock ? "Yahoo" : fmtUsd(a.total_oi_usd)}</value>
+            <label>${stock ? "자산유형" : "3거래소 OI 합"}</label>
+            <value>${stock ? "TradFi 무기한" : fmtUsd(a.total_oi_usd)}</value>
           </div>
         </div>
+        ${
+          stock
+            ? `<p class="ls-hint" style="margin-top:0.65rem">가격은 KRX 원화 현물이 아니라 <strong>Binance USDT 무기한</strong>(${a.symbol || coin.symbol}) 기준입니다.</p>`
+            : ""
+        }
       </div>
 
       ${lsCard}
     </div>
 
-    <h2 class="section-title">${stock ? "시장 · 시세 소스" : "거래소별 포지션 · 유동성"}</h2>
+    <h2 class="section-title">거래소별 포지션 · 유동성</h2>
     ${exchangeRows(exchanges, a.total_oi_usd, a.primary_source || coin.primary_source, a)}
 
     <h2 class="section-title">지지 · 저항 레벨</h2>
@@ -637,7 +578,7 @@ function renderDetail() {
       </div>
     </div>
 
-    <h2 class="section-title">${stock ? "매수 · 매도 시나리오 (진입 / SL / TP)" : "롱 · 숏 시나리오 (진입 / SL / TP)"}</h2>
+    <h2 class="section-title">롱 · 숏 시나리오 (진입 / SL / TP)</h2>
     <div class="pref-banner">
       <div class="icon">${prefIcon}</div>
       <div>

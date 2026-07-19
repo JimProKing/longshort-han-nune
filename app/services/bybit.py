@@ -6,12 +6,12 @@ from typing import Any
 
 import httpx
 
-from app.services.assets import CRYPTO_SYMBOLS
+from app.services.assets import PERP_SYMBOLS
 from app.services.http_util import get_json
 
 BYBIT = "https://api.bybit.com"
 
-SYMBOLS = CRYPTO_SYMBOLS
+SYMBOLS = PERP_SYMBOLS
 
 # Bybit kline interval strings
 INTERVAL_MAP = {

@@ -215,7 +215,7 @@ def _confidence(side: str, sentiment: dict, analysis: dict) -> tuple[int, str]:
     ema50 = emas.get("ema50")
 
     if is_stock:
-        reasons.append("국내 주식 — 기술 레벨·EMA 기반 (선물 롱/숏 비율 없음)")
+        reasons.append("Binance/Bybit TradFi 주식 연동 무기한 (USDT)")
 
     if side == "long":
         if bias == "bullish":

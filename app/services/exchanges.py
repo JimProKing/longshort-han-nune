@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 from app.services import bybit as bybit_svc
-from app.services.assets import CRYPTO_SYMBOLS, HL_COINS, KRAKEN_SYMBOLS, is_stock
+from app.services.assets import HL_COINS, KRAKEN_SYMBOLS, PERP_SYMBOLS, is_crypto
 from app.services.binance import (
     FAPI,
     FUTURES_DATA,
@@ -22,12 +22,11 @@ from app.services.binance import (
     fetch_top_trader_ls_ratio,
     fetch_top_trader_position_ratio,
 )
-from app.services.stocks import fetch_stock_bundle
 
 HL_INFO = "https://api.hyperliquid.xyz/info"
 KRAKEN_TICKERS = "https://futures.kraken.com/derivatives/api/v3/tickers"
 
-BINANCE_SYMBOLS = CRYPTO_SYMBOLS
+BINANCE_SYMBOLS = PERP_SYMBOLS
 
 
 from app.services.http_util import get_json, post_json
@@ -257,10 +256,10 @@ async def fetch_symbol_bundle(
     prefer_bybit: bool = False,
 ) -> dict:
     """
-    Full multi-exchange bundle for one asset.
+    Full multi-exchange bundle for one asset (crypto or TradFi stock perp).
 
-    Crypto: Binance (L/S, klines…) → 실패/429 시 Bybit; side Hyperliquid / Kraken
-    Stock: Yahoo Finance (KRX) — 지지/저항·시나리오 (계정 L/S 없음)
+    Primary: Binance (L/S, klines…) → 실패/429 시 Bybit
+    Side (crypto only): Hyperliquid, Kraken OI / funding / volume
     """
     asset = asset.upper()
 
@@ -275,19 +274,20 @@ async def fetch_symbol_bundle(
 
     assert client is not None
     try:
-        if is_stock(asset):
-            bundle = await fetch_stock_bundle(client, asset)
-            return bundle
-
         if asset not in BINANCE_SYMBOLS:
             raise ValueError(f"Unsupported asset: {asset}")
         symbol = BINANCE_SYMBOLS[asset]
+        crypto = is_crypto(asset)
 
-        if hl_all is None or kr_all is None:
+        # TradFi stock perps are not on HL/Kraken — skip side exchange bulk fetch
+        if crypto and (hl_all is None or kr_all is None):
             hl_task = asyncio.create_task(fetch_hyperliquid_all(client))
             kr_task = asyncio.create_task(fetch_kraken_all(client))
         else:
             hl_task = kr_task = None
+            if not crypto:
+                hl_all = hl_all if isinstance(hl_all, dict) else {}
+                kr_all = kr_all if isinstance(kr_all, dict) else {}
 
         primary = None
         primary_err = None
@@ -358,12 +358,14 @@ async def fetch_symbol_bundle(
         oi_parts.append(float(kr["oi_usd"]))
     total_oi_usd = sum(oi_parts) if oi_parts else None
 
+    from app.services.assets import asset_type as _asset_type
+
     return {
         "asset": asset,
         "symbol": symbol,
         "primary_source": source,
         "primary_error": primary_err,
-        "asset_type": "crypto",
+        "asset_type": _asset_type(asset),
         "currency": "USD",
         "ticker": raw["ticker"],
         "klines_4h": raw.get("klines_4h") or [],

@@ -6,14 +6,14 @@ from typing import Any
 
 import httpx
 
-from app.services.assets import CRYPTO_SYMBOLS
+from app.services.assets import PERP_SYMBOLS
 from app.services.http_util import get_json
 
 FAPI = "https://fapi.binance.com"
 FUTURES_DATA = "https://fapi.binance.com/futures/data"
 
-# Backward-compatible export (crypto perpetuals only)
-SYMBOLS = CRYPTO_SYMBOLS
+# Crypto + TradFi stock perpetuals (SAMSUNGUSDT 등)
+SYMBOLS = PERP_SYMBOLS
 
 # Public L/S account ratios are time-bucketed. 5m is the finest Binance offers
 # (true tick-level long/short % is not exposed on free REST).

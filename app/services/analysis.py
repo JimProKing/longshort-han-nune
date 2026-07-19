@@ -147,8 +147,8 @@ def sentiment_from_ratios(
     Composite market sentiment.
     High retail long ratio + negative funding often = crowded long (risk of dump).
     """
-    # Equities: no public account L/S — pure technical / neutral bias
-    if asset_type == "stock":
+    # No L/S series (should be rare; TradFi stock perps on Binance do provide L/S)
+    if not global_ls:
         return {
             "global_long_pct": None,
             "global_short_pct": None,
@@ -158,8 +158,8 @@ def sentiment_from_ratios(
             "top_position_long_pct": None,
             "top_position_ls_ratio": None,
             "taker_buy_sell_ratio": None,
-            "funding_rate": None,
-            "funding_rate_pct": None,
+            "funding_rate": funding_rate,
+            "funding_rate_pct": round(float(funding_rate or 0) * 100, 4),
             "composite_score": 0.0,
             "label": "기술분석 중심 (L/S 없음)",
             "bias": "neutral",
@@ -399,7 +399,7 @@ def analyze_symbol(bundle: dict) -> dict:
     price = bundle["ticker"]["price"]
     funding = float((bundle.get("funding") or {}).get("last_funding_rate") or 0.0)
     asset_type = bundle.get("asset_type") or "crypto"
-    currency = bundle.get("currency") or ("KRW" if asset_type == "stock" else "USD")
+    currency = bundle.get("currency") or "USD"
 
     sentiment = sentiment_from_ratios(
         bundle.get("global_ls") or [],
