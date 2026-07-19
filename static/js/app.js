@@ -17,10 +17,14 @@ const ASSET_META = {
 const AUTO_REFRESH_MS = 60_000;
 
 let state = {
+  mode: "market", // market | ocn
   coins: [],
   selected: "BTC",
   loading: false,
   autoTimer: null,
+  ocn: null,
+  ocnDay: null,
+  ocnLoading: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -601,7 +605,185 @@ function render() {
   renderDetail();
 }
 
+function applyModeUI() {
+  const market = state.mode === "market";
+  $("marketIntro")?.classList.toggle("hidden", !market);
+  $("ocnIntro")?.classList.toggle("hidden", market);
+  $("app")?.classList.toggle("hidden", !market || !state.coins.length);
+  $("ocnApp")?.classList.toggle("hidden", market);
+
+  document.querySelectorAll(".mode-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.mode === state.mode);
+  });
+}
+
+function setMode(mode) {
+  if (state.mode === mode) return;
+  state.mode = mode;
+  applyModeUI();
+  $("errorBox")?.classList.add("hidden");
+  if (mode === "market") {
+    if (state.coins.length) {
+      $("loading")?.classList.add("hidden");
+      $("idle")?.classList.add("hidden");
+      $("app")?.classList.remove("hidden");
+      render();
+    } else {
+      loadData({ force: false });
+    }
+  } else {
+    $("app")?.classList.add("hidden");
+    loadOcnSchedule({ force: false });
+  }
+}
+
+function renderOcn() {
+  const panel = $("ocnPanel");
+  if (!panel) return;
+  const data = state.ocn;
+  if (!data) {
+    panel.innerHTML = `<div class="state-box"><p>편성표를 불러오는 중…</p></div>`;
+    return;
+  }
+
+  const days = data.days || [];
+  const dayKey = state.ocnDay || data.today || days[0]?.date;
+  state.ocnDay = dayKey;
+  const programs = (data.programs_by_date && data.programs_by_date[dayKey]) || [];
+  const dayMeta = days.find((d) => d.date === dayKey) || {};
+
+  const dayBtns = days
+    .map((d) => {
+      const isToday = d.date === data.today;
+      const active = d.date === dayKey;
+      return `
+        <button type="button" class="ocn-day ${active ? "active" : ""} ${isToday ? "today" : ""}" data-day="${d.date}">
+          <span class="ocn-day-wd">${isToday ? "오늘" : d.weekday || ""}</span>
+          <span class="ocn-day-num">${d.day || d.date?.slice(6) || ""}</span>
+        </button>`;
+    })
+    .join("");
+
+  const rows = programs.length
+    ? programs
+        .map((p) => {
+          const badges = [
+            p.flag ? `<span class="ocn-badge ${p.flag === "본" ? "live" : "rerun"}">${p.flag}</span>` : "",
+            p.rating ? `<span class="ocn-badge rating">${p.rating}</span>` : "",
+            p.caption ? `<span class="ocn-badge soft">자막</span>` : "",
+            p.audio_desc ? `<span class="ocn-badge soft">화면해설</span>` : "",
+            p.sign_lang ? `<span class="ocn-badge soft">수어</span>` : "",
+            p.on_air ? `<span class="ocn-badge onair">ON AIR</span>` : "",
+          ]
+            .filter(Boolean)
+            .join("");
+          const sub = p.episode ? `<div class="ocn-ep">${p.episode}</div>` : "";
+          const link = p.detail_url
+            ? `<a class="ocn-title-link" href="${p.detail_url}" target="_blank" rel="noopener noreferrer">${p.title}</a>`
+            : `<span class="ocn-title-text">${p.title}</span>`;
+          return `
+            <li class="ocn-row ${p.on_air ? "on-air" : ""}">
+              <div class="ocn-time">
+                <strong>${p.start_time || "—"}</strong>
+                <span>${p.end_time ? `~ ${p.end_time}` : ""}</span>
+              </div>
+              <div class="ocn-body">
+                ${link}
+                ${sub}
+                <div class="ocn-badges">${badges}</div>
+              </div>
+            </li>`;
+        })
+        .join("")
+    : `<li class="ocn-empty">이 날짜의 편성 정보가 없습니다.</li>`;
+
+  panel.innerHTML = `
+    <div class="card ocn-card">
+      <div class="ocn-head">
+        <div>
+          <div class="card-title">OCN 편성표</div>
+          <p class="ocn-sub">${dayMeta.label || dayKey} · ${programs.length}개 프로그램</p>
+        </div>
+        <a class="btn btn-ghost" href="${data.source_url || "https://ocn.cjenm.com/ko/ocn-schedule/"}" target="_blank" rel="noopener noreferrer">공식 사이트 ↗</a>
+      </div>
+      <div class="ocn-days">${dayBtns}</div>
+      <ul class="ocn-list">${rows}</ul>
+      <p class="ls-hint">${data.disclaimer || ""}</p>
+      <div class="ocn-legend">
+        <span><i class="dot live"></i> 본방</span>
+        <span><i class="dot rerun"></i> 재방</span>
+        <span><i class="dot onair"></i> 현재 방송 중</span>
+        <span>숫자 = 시청 등급</span>
+      </div>
+    </div>`;
+
+  panel.querySelectorAll(".ocn-day").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.ocnDay = btn.dataset.day;
+      renderOcn();
+    });
+  });
+
+  $("updatedAt").textContent = data.cached
+    ? `OCN 캐시 · ${fmtTime(data.fetched_at)} (${data.cache_age_sec ?? 0}s)`
+    : `OCN 갱신 · ${fmtTime(data.fetched_at)}`;
+}
+
+async function loadOcnSchedule({ force = false, silent = false } = {}) {
+  if (state.ocnLoading) return;
+  state.ocnLoading = true;
+  const btn = $("refreshBtn");
+  if (!silent) {
+    btn.disabled = true;
+    $("refreshIcon").textContent = "…";
+    $("errorBox")?.classList.add("hidden");
+  }
+  if (!state.ocn) {
+    $("loading")?.classList.remove("hidden");
+    $("ocnApp")?.classList.add("hidden");
+  }
+
+  try {
+    const url = force ? "/api/ocn/schedule?refresh=true" : "/api/ocn/schedule";
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(typeof err.detail === "string" ? err.detail : `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    state.ocn = data;
+    if (!state.ocnDay || !(data.programs_by_date || {})[state.ocnDay]) {
+      state.ocnDay = data.today || data.days?.[0]?.date || null;
+    }
+    $("loading")?.classList.add("hidden");
+    $("idle")?.classList.add("hidden");
+    if (state.mode === "ocn") {
+      $("ocnApp")?.classList.remove("hidden");
+      renderOcn();
+    }
+  } catch (e) {
+    $("loading")?.classList.add("hidden");
+    if (!silent || !state.ocn) {
+      $("errorBox").textContent = `OCN 편성표 로드 실패: ${e.message}`;
+      $("errorBox").classList.remove("hidden");
+    }
+    if (state.ocn && state.mode === "ocn") {
+      $("ocnApp")?.classList.remove("hidden");
+      renderOcn();
+    } else if (state.mode === "ocn") {
+      $("idle")?.classList.remove("hidden");
+    }
+  } finally {
+    state.ocnLoading = false;
+    btn.disabled = false;
+    $("refreshIcon").textContent = "↻";
+  }
+}
+
 async function loadData({ force = false, silent = false } = {}) {
+  if (state.mode === "ocn") {
+    return loadOcnSchedule({ force, silent });
+  }
   if (state.loading) return;
   state.loading = true;
 
@@ -659,8 +841,10 @@ async function loadData({ force = false, silent = false } = {}) {
 
     $("loading").classList.add("hidden");
     $("idle")?.classList.add("hidden");
-    $("app").classList.remove("hidden");
-    render();
+    if (state.mode === "market") {
+      $("app").classList.remove("hidden");
+      render();
+    }
   } catch (e) {
     $("loading").classList.add("hidden");
     // 자동 폴링 실패 시 기존 화면 유지 (잠깐 네트워크 끊김 허용)
@@ -668,10 +852,10 @@ async function loadData({ force = false, silent = false } = {}) {
       $("errorBox").textContent = `데이터 로드 실패: ${e.message}`;
       $("errorBox").classList.remove("hidden");
     }
-    if (state.coins.length) {
+    if (state.coins.length && state.mode === "market") {
       $("app").classList.remove("hidden");
       render();
-    } else {
+    } else if (state.mode === "market") {
       $("app").classList.add("hidden");
       $("idle")?.classList.remove("hidden");
     }
@@ -686,18 +870,23 @@ function startAutoRefresh() {
   if (state.autoTimer) clearInterval(state.autoTimer);
   state.autoTimer = setInterval(() => {
     if (document.visibilityState === "hidden") return;
+    if (state.mode !== "market") return;
     loadData({ force: false, silent: true });
   }, AUTO_REFRESH_MS);
 }
 
 $("refreshBtn").addEventListener("click", () => loadData({ force: true }));
+document.querySelectorAll(".mode-tab").forEach((btn) => {
+  btn.addEventListener("click", () => setMode(btn.dataset.mode));
+});
 document.addEventListener("visibilitychange", () => {
   // 탭 복귀 시 최신값 (캐시 만료됐으면 자연 갱신, 아니면 캐시 표시)
-  if (document.visibilityState === "visible") {
+  if (document.visibilityState === "visible" && state.mode === "market") {
     loadData({ force: false, silent: true });
   }
 });
 
-// 첫 방문 1회 + 1분마다 자동 갱신 (탭이 보일 때만)
+// 첫 방문 1회 + 1분마다 자동 갱신 (시세 모드일 때만)
+applyModeUI();
 loadData({ force: false });
 startAutoRefresh();

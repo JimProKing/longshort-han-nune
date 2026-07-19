@@ -18,6 +18,7 @@ from app.services.exchanges import (
     fetch_kraken_all,
     fetch_symbol_bundle,
 )
+from app.services.ocn import fetch_ocn_schedule
 from app.services.strategy import build_strategies
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -222,6 +223,17 @@ async def analyze_asset(asset: str, refresh: bool = False):
 
     _cache[cache_key] = (now, data)
     return {**data, "cached": False}
+
+
+@app.get("/api/ocn/schedule")
+async def ocn_schedule(refresh: bool = Query(False, description="캐시 무시하고 강제 갱신")):
+    """OCN 주간 편성표 (공식 사이트 SSR 데이터)."""
+    try:
+        async with _client() as client:
+            data = await fetch_ocn_schedule(client, force=refresh)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"OCN 편성표 조회 실패: {e}") from e
 
 
 # Static frontend

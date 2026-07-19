@@ -215,6 +215,259 @@ a:hover {
   transform: none;
 }
 
+.btn-ghost {
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.btn-ghost:hover {
+  color: var(--accent);
+  border-color: rgba(37, 99, 235, 0.35);
+  text-decoration: none;
+}
+
+/* Mode tabs (market / OCN) */
+.mode-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.mode-tab {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.7rem 1.15rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.92rem;
+  transition: 0.15s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.mode-tab:hover {
+  border-color: rgba(37, 99, 235, 0.35);
+  color: var(--text);
+}
+
+.mode-tab.active {
+  background: linear-gradient(135deg, #111827, #1f2937);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2);
+}
+
+/* OCN schedule */
+.ocn-card {
+  padding: 1.15rem 1.2rem 1.25rem;
+}
+
+.ocn-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.ocn-sub {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.ocn-days {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.ocn-day {
+  min-width: 3.4rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  transition: 0.15s ease;
+}
+
+.ocn-day:hover {
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+.ocn-day.active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.ocn-day.today:not(.active) {
+  border-color: rgba(37, 99, 235, 0.45);
+  color: var(--accent);
+}
+
+.ocn-day-wd {
+  font-size: 0.72rem;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.ocn-day-num {
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-family: var(--mono);
+}
+
+.ocn-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.ocn-row {
+  display: grid;
+  grid-template-columns: 5.2rem 1fr;
+  gap: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: #fafbfc;
+}
+
+.ocn-row.on-air {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.06), #fff);
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.08);
+}
+
+.ocn-time {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-family: var(--mono);
+}
+
+.ocn-time strong {
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.ocn-time span {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.ocn-title-text,
+.ocn-title-link {
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--text);
+}
+
+.ocn-title-link:hover {
+  color: var(--accent);
+}
+
+.ocn-ep {
+  margin-top: 0.15rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.ocn-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+.ocn-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.ocn-badge.live {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.ocn-badge.rerun {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.ocn-badge.rating {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+.ocn-badge.onair {
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+}
+
+.ocn-badge.soft {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid var(--border);
+}
+
+.ocn-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.ocn-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.ocn-legend .dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  margin-right: 0.3rem;
+  vertical-align: middle;
+}
+
+.ocn-legend .dot.live { background: #1d4ed8; }
+.ocn-legend .dot.rerun { background: #94a3b8; }
+.ocn-legend .dot.onair { background: #dc2626; }
+
+@media (max-width: 560px) {
+  .ocn-row {
+    grid-template-columns: 4.4rem 1fr;
+    gap: 0.55rem;
+    padding: 0.65rem 0.7rem;
+  }
+}
+
 /* Layout */
 .container {
   max-width: 1280px;

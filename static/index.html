@@ -32,7 +32,12 @@
   </header>
 
   <main class="container">
-    <section class="intro">
+    <nav class="mode-tabs" id="modeTabs" aria-label="메인 메뉴">
+      <button type="button" class="mode-tab active" data-mode="market">롱숏 · 시세</button>
+      <button type="button" class="mode-tab" data-mode="ocn">OCN 편성표</button>
+    </nav>
+
+    <section class="intro" id="marketIntro">
       <p class="intro-lead">
         롱·숏 비율이랑 지지선, 진입가가 사이트마다 흩어져 있어서
         <strong>한 화면</strong>에 모아 두었습니다.
@@ -49,6 +54,18 @@
         <span class="intro-tag">SK하이닉스</span>
         <span class="intro-tag">현대차</span>
         <span class="intro-tag muted">Binance · Bybit TradFi</span>
+      </div>
+    </section>
+
+    <section class="intro hidden" id="ocnIntro">
+      <p class="intro-lead">
+        <strong>OCN</strong> 주간 편성표를 한눈에 봅니다.
+        공식 사이트 데이터를 가져와 날짜별로 보여 줍니다.
+      </p>
+      <div class="intro-tags">
+        <span class="intro-tag">OCN</span>
+        <span class="intro-tag muted">주간 편성</span>
+        <a class="intro-tag muted" href="https://ocn.cjenm.com/ko/ocn-schedule/" target="_blank" rel="noopener noreferrer">공식 편성표 ↗</a>
       </div>
     </section>
 
@@ -72,6 +89,10 @@
       <div id="detail"></div>
 
       <div class="disclaimer" id="disclaimer"></div>
+    </div>
+
+    <div id="ocnApp" class="hidden">
+      <div id="ocnPanel"></div>
     </div>
   </main>
 
